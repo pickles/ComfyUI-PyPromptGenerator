@@ -26,6 +26,85 @@ Perfect for scenarios where you need:
    ```
 4. Restart ComfyUI
 
+## Quick Start with Mount Fuji Demo
+
+This project includes a comprehensive demonstration script that showcases all PyPromptGenerator features by generating beautiful Mount Fuji artwork prompts.
+
+### Running the Demo
+
+The project includes a convenient wrapper script for running sample scripts:
+
+```bash
+# Navigate to the project directory
+cd ComfyUI-PyPromptGenerator
+
+# List available sample scripts
+python run_sample.py --list
+
+# Run the Mount Fuji generator demo
+python run_sample.py mount_fuji_generator
+
+# Show help
+python run_sample.py --help
+```
+
+### Mount Fuji Generator Features
+
+The `mount_fuji_generator.py` demonstrates:
+
+- **🎨 Art Style Selection**: Traditional Japanese painting, ukiyo-e, sumi-e, watercolor, photorealistic
+- **🌸 Seasonal Variations**: Spring cherry blossoms, autumn maple leaves, winter snow, summer greenery
+- **🏔️ Dynamic Compositions**: Lake Kawaguchi views, Chureito Pagoda, rice fields, traditional gardens
+- **🎨 Color Palettes**: Soft pastels, dramatic sunsets, monochromatic tones, earth colors
+- **✨ Atmospheric Effects**: Lens flares, bokeh, volumetric lighting, atmospheric haze
+- **⛩️ Traditional Elements**: Torii gates, Japanese calligraphy, gold leaf accents
+- **🔄 Nested Wildcards**: Complex compositions using wildcard references
+- **🎲 Weighted Selection**: Balanced probabilities for different styles and seasons
+- **📊 Smart Structure**: BREAK notation for organized prompt sections
+
+### Sample Output
+
+```
+=== Mount Fuji Artwork Generation Demo ===
+
+【Style】: ukiyo-e woodblock print
+【Season】: spring with cherry blossoms  
+【Composition】: reflection in lake waters
+【Colors】: soft pastel colors
+【Mood】: serene and peaceful
+【Resolution】: 1280x720
+
+【Positive Prompt】 (385 characters):
+Mount Fuji, reflection in lake waters
+BREAK
+ukiyo-e woodblock print, masterpiece, fine art
+BREAK
+spring with cherry blossoms, sunrise golden light, soft pastel colors
+BREAK
+blooming sakura trees, traditional torii gate
+BREAK
+gentle bokeh effect, atmospheric haze
+BREAK
+serene and peaceful, intricate brush strokes, delicate cloud formations
+BREAK
+1280x720, fine art
+
+【Statistics】:
+- Number of wildcards used: 6
+- Foreground elements: 2
+- Artistic details: 3
+- Traditional elements: None
+- Atmospheric effects: 2
+```
+
+### Creating Your Own Scripts
+
+The `run_sample.py` wrapper allows you to create and run your own prompt generation scripts:
+
+1. Create a new Python file in the `sample_scripts/` directory
+2. Use all PyPromptGenerator utility functions without imports
+3. Run your script: `python run_sample.py your_script_name`
+
 ## Features
 
 ### 🎯 **PyPromptGenerator Node**
@@ -76,56 +155,63 @@ Wildcard files allow you to define reusable lists of terms that can be randomly 
 Create text files in the `wildcards/` directory:
 ```
 wildcards/
-├── styles.txt
-├── colors.txt
-├── subjects.txt
-├── effects.txt
-└── moods.txt
+├── fuji_colors.txt                  # Mount Fuji color palettes
+├── fuji_compositions.txt            # Composition and viewpoints
+├── fuji_compositions_complex.txt    # Nested wildcard compositions
+├── fuji_details.txt                 # Artistic details and effects
+├── fuji_foreground.txt              # Foreground elements
+├── fuji_seasons.txt                 # Seasons and weather conditions
+├── mount_fuji_styles.txt            # Art styles for Mount Fuji
+└── your_custom_wildcards.txt        # Add your own wildcard files
 ```
+
+The project includes Mount Fuji-themed wildcard files as examples, but you can create your own wildcard files for any subject matter.
 
 ### File Format
 Each wildcard file should contain one item per line:
 
-**Example: `wildcards/styles.txt`**
+**Example: `wildcards/mount_fuji_styles.txt`**
 ```
-photorealistic
-anime
-oil painting
-watercolor
-digital art
-concept art
-impressionist
-abstract
-minimalist
-vintage
-```
-
-**Example: `wildcards/colors.txt`**
-```
-vibrant red
-deep blue
-golden yellow
-emerald green
-purple
-silver
-rose gold
-coral pink
-midnight black
-pristine white
+traditional Japanese painting
+ukiyo-e woodblock print
+sumi-e ink painting
+watercolor landscape
+oil painting masterpiece
+digital art concept
+photorealistic landscape
+anime landscape style
+studio ghibli style
+minimalist landscape
+impressionist painting
+vintage postcard style
 ```
 
-**Example: `wildcards/subjects.txt`**
+**Example: `wildcards/fuji_colors.txt`**
 ```
-beautiful woman
-handsome man
-cute cat
-majestic dragon
-fantasy castle
-cyberpunk city
-ancient temple
-mystical forest
-space station
-alien landscape
+soft pastel colors
+vibrant autumn hues
+monochromatic blue tones
+warm golden lighting
+cool morning blues
+dramatic sunset oranges
+ethereal misty whites
+deep forest greens
+pristine snow whites
+rich earth tones
+```
+
+**Example: `wildcards/fuji_seasons.txt`**
+```
+spring with cherry blossoms
+summer with lush greenery
+autumn with red maple leaves
+winter with snow-capped peak
+early morning mist
+sunset golden hour
+clear blue sky day
+dramatic storm clouds
+moonlit night scene
+dawn breaking over mountains
 ```
 
 ### Advanced Wildcard Features
@@ -168,12 +254,13 @@ epic
 #### Nested Wildcards (Advanced)
 You can reference other wildcard files within wildcard files using `{wildcard_name}` syntax:
 
-**Example: `wildcards/characters.txt`**
+**Example: `wildcards/fuji_compositions_complex.txt`**
 ```
-{styles} style warrior
-{colors} haired mage
-ancient {subjects}
-mighty {colors} {subjects}
+{mount_fuji_styles} of Mount Fuji in {fuji_seasons}
+{fuji_compositions} with {fuji_foreground} in foreground
+{fuji_colors} Mount Fuji landscape with {fuji_details}
+traditional Japanese {mount_fuji_styles} featuring {fuji_foreground}
+{fuji_seasons} Mount Fuji scene with {fuji_compositions}
 ```
 
 **How Nested Wildcards Work:**
@@ -184,8 +271,8 @@ mighty {colors} {subjects}
 - Invalid references are left as-is with a warning
 
 **Example expansion:**
-- `{styles} style warrior` might become `"anime style warrior"` or `"realistic style warrior"`
-- `mighty {colors} {subjects}` might become `"mighty red dragon"` or `"mighty blue castle"`
+- `{mount_fuji_styles} of Mount Fuji in {fuji_seasons}` might become `"ukiyo-e woodblock print of Mount Fuji in spring with cherry blossoms"`
+- `{fuji_colors} Mount Fuji landscape with {fuji_details}` might become `"dramatic sunset oranges Mount Fuji landscape with intricate brush strokes"`
 
 ### Using Wildcards in Scripts
 
@@ -193,31 +280,32 @@ Wildcard files are automatically loaded as variables prefixed with `_`:
 
 ```python
 # Wildcard variables are automatically available
-# _styles, _colors, _subjects, _effects, _moods
+# _mount_fuji_styles, _fuji_colors, _fuji_seasons, etc.
 
 # Basic usage
-selected_style = choice(_styles)
-selected_color = choice(_colors)
-selected_subject = choice(_subjects)
+selected_style = choice(_mount_fuji_styles)
+selected_color = choice(_fuji_colors)
+selected_season = choice(_fuji_seasons)
 
-positive_prompt = f"{selected_style}, {selected_color} {selected_subject}"
+positive_prompt = f"{selected_style}, {selected_color}, {selected_season}"
 
 # Advanced usage with multiple selections
-style_combo = choice(_styles, count=2)  # Get 2 different styles
-effect_stack = choice(_effects, count=3)  # Get 3 different effects
+style_combo = choice(_mount_fuji_styles, count=2)  # Get 2 different styles
+details = choice(_fuji_details, count=3)  # Get 3 different details
 
-positive_prompt = f"{join(style_combo)}, {selected_subject}, {join(effect_stack)}"
+positive_prompt = f"{join(style_combo)}, Mount Fuji, {join(details)}"
 
-# Conditional usage
-if random_boolean(0.8):
-    mood = choice(_moods)
-    positive_prompt += f", {mood}"
+# Conditional usage with seasonal elements
+if "spring" in selected_season:
+    foreground = choice(_fuji_foreground)
+    positive_prompt += f", {foreground}"
 
 # Check if wildcard exists before using
-if '_styles' in globals():
-    style = choice(_styles)
+if '_fuji_compositions_complex' in globals():
+    complex_comp = choice(_fuji_compositions_complex)
+    positive_prompt = complex_comp
 else:
-    style = "realistic"  # fallback
+    composition = "majestic view from Lake Kawaguchi"  # fallback
 ```
 
 ### Wildcard Management Functions
@@ -248,25 +336,27 @@ custom_wildcards = load_wildcards("/path/to/custom/wildcards")
 **Wildcard not found:**
 ```python
 # Always check if wildcard exists
-if '_mystyles' in globals():
-    style = choice(_mystyles)
+if '_mount_fuji_styles' in globals():
+    style = choice(_mount_fuji_styles)
 else:
-    print("Wildcard _mystyles not found")
-    style = "default"
+    print("Wildcard _mount_fuji_styles not found")
+    style = "traditional Japanese painting"
 ```
 
 **Reload after changes:**
 ```python
 # Force reload if you've modified wildcard files
 refresh_wildcards()
-selected_item = choice(_styles)  # Now uses updated file
+selected_item = choice(_fuji_colors)  # Now uses updated file
 ```
 
 ### 🔧 **Developer Features**
-- **Comprehensive Tests**: Full test suite with 60+ test cases
+- **Comprehensive Tests**: Full test suite with 94 test cases covering all functionality
 - **Type Safety**: MyPy compatible with proper type hints
 - **Code Quality**: Ruff linting and pre-commit hooks
 - **Documentation**: Extensive inline documentation and examples
+- **Sample Scripts**: Complete Mount Fuji art generator demonstrating all features
+- **Script Wrapper**: Easy-to-use `run_sample.py` for testing and development
 
 ## Usage Examples
 
@@ -351,19 +441,19 @@ positive_prompt = join(elements)
 ### Using Nested Wildcards
 ```python
 # Create wildcard files with nested references
-# styles.txt: realistic, anime, oil painting
-# colors.txt: red, blue, golden
-# characters.txt: {styles} {colors} warrior, mystical {colors} mage
+# mount_fuji_styles.txt: traditional Japanese painting, ukiyo-e woodblock print, sumi-e ink painting
+# fuji_colors.txt: soft pastel colors, dramatic sunset oranges, monochromatic blue tones
+# fuji_compositions_complex.txt: {mount_fuji_styles} of Mount Fuji in {fuji_seasons}
 
 # Use nested wildcards in script
-if '_characters' in globals():
-    character = choice(_characters)
-    # Might result in: "anime red warrior" or "mystical golden mage"
-    positive_prompt = f"{character}, detailed artwork"
+if '_fuji_compositions_complex' in globals():
+    complex_composition = choice(_fuji_compositions_complex)
+    # Might result in: "ukiyo-e woodblock print of Mount Fuji in spring with cherry blossoms"
+    positive_prompt = f"{complex_composition}, masterpiece, highly detailed"
 else:
-    positive_prompt = "fantasy character, detailed artwork"
+    positive_prompt = "Mount Fuji landscape, masterpiece, highly detailed"
 
-negative_prompt = "low quality, blurry"
+negative_prompt = "low quality, blurry, modern buildings"
 ```
 
 ## Development
@@ -382,7 +472,7 @@ The `-e` flag results in a "live" install where changes to the extension are aut
 
 ### Running Tests
 
-The project includes comprehensive test coverage:
+The project includes comprehensive test coverage with 94 test cases:
 
 ```bash
 # Run all tests
@@ -395,7 +485,20 @@ pytest -m slow          # Slow tests only
 
 # Run with coverage
 pytest --cov=src --cov-report=html
+
+# Run tests with verbose output
+pytest -v
 ```
+
+Test categories include:
+- **Choice function tests** (17 tests) - Weighted selection, multiple selection, edge cases
+- **Utility function tests** (20 tests) - All utility functions including `maybe`, `flatten`, `join`
+- **Nested wildcard tests** (9 tests) - Advanced wildcard functionality
+- **Integration tests** (13 tests) - ComfyUI node integration and complex scenarios
+- **Wildcard tests** (10 tests) - Wildcard loading, caching, and management
+- **File generator tests** (8 tests) - File-based script execution
+- **Flatten function tests** (13 tests) - Array flattening with various scenarios
+- **Other specialized tests** (4 tests) - Additional edge cases and functionality
 
 ### Code Quality
 
@@ -412,9 +515,11 @@ This project uses several tools to maintain code quality:
 ComfyUI-PyPromptGenerator/
 ├── src/pyprompt_generator/           # Main package
 │   ├── nodes.py                     # ComfyUI node implementations
-│   ├── utils.py                     # Utility functions
+│   ├── utils.py                     # Utility functions with nested wildcards
 │   └── __init__.py                  # Package initialization
-├── tests/                           # Test suite
+├── sample_scripts/                   # Example scripts and demos
+│   └── mount_fuji_generator.py      # Comprehensive Mount Fuji art generator demo
+├── tests/                           # Comprehensive test suite (94 tests)
 │   ├── test_choice.py               # Choice function tests
 │   ├── test_file_generator.py       # File generator node tests
 │   ├── test_flatten.py              # Flatten function tests
@@ -424,20 +529,23 @@ ComfyUI-PyPromptGenerator/
 │   ├── test_wildcard.py             # Wildcard function tests
 │   ├── test_wildcard_manager.py     # WildcardManager tests
 │   ├── conftest.py                  # Test configuration
-│   ├── pytest.ini                   # Pytest configuration
-│   └── sample_scripts/              # Sample test scripts
-├── wildcards/                       # Example wildcard files
-│   ├── colors.txt                   # Color wildcard examples
-│   ├── compositions.txt             # Nested wildcard compositions
-│   ├── styles.txt                   # Style wildcard examples
-│   ├── subjects.txt                 # Subject wildcard examples
-│   └── create_wildcards_here        # Placeholder file
+│   └── pytest.ini                   # Pytest configuration
+├── wildcards/                       # Mount Fuji themed wildcard files
+│   ├── fuji_colors.txt              # Color palettes for Mount Fuji
+│   ├── fuji_compositions.txt        # Composition and viewpoints
+│   ├── fuji_compositions_complex.txt # Nested wildcard compositions
+│   ├── fuji_details.txt             # Artistic details and effects
+│   ├── fuji_foreground.txt          # Foreground elements
+│   ├── fuji_seasons.txt             # Seasons and weather
+│   ├── mount_fuji_styles.txt        # Art styles for Mount Fuji
+│   └── create_wildcards_here        # Placeholder for custom wildcards
+├── run_sample.py                    # Sample script execution wrapper
 ├── .github/                         # GitHub configuration
-│   ├── workflows/                   # CI/CD workflows
-│   └── ISSUE_TEMPLATE.md            # Issue template
+│   └── workflows/                   # CI/CD workflows
+├── .vscode/                         # VS Code configuration
 ├── pyproject.toml                   # Project configuration
 ├── MANIFEST.in                      # Package manifest
-├── LICENSE                          # License file
+├── LICENSE                          # MIT License
 ├── README.md                        # Documentation (English)
 └── README-JA.md                     # Documentation (Japanese)
 ```

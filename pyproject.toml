@@ -95,7 +95,7 @@ inline-quotes = "double"
 [tool.pyright]
 include = ["src"]
 exclude = ["**/__pycache__", "sample_scripts"]
-ignore = ["sample_scripts"]
+ignore = ["sample_scripts", "scripts"]
 reportMissingImports = true
 reportMissingTypeStubs = false
 reportUnusedImport = true

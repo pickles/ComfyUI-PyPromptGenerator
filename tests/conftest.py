@@ -5,7 +5,6 @@ Pytest configuration and fixtures for ComfyUI Prompt Generator tests
 import pytest
 import sys
 import os
-from unittest.mock import Mock
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))

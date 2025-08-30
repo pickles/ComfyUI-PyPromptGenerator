@@ -26,6 +26,85 @@ Pythonスクリプトを使用して動的なプロンプト生成を可能に�
    ```
 4. ComfyUIを再起動
 
+## 富士山デモによるクイックスタート
+
+このプロジェクトには、PyPromptGeneratorの全機能を美しい富士山アートワークプロンプトの生成を通じて紹介する包括的なデモスクリプトが含まれています。
+
+### デモの実行
+
+プロジェクトにはサンプルスクリプト実行用の便利なラッパースクリプトが含まれています：
+
+```bash
+# プロジェクトディレクトリに移動
+cd ComfyUI-PyPromptGenerator
+
+# 利用可能なサンプルスクリプトを一覧表示
+python run_sample.py --list
+
+# 富士山ジェネレーターデモを実行
+python run_sample.py mount_fuji_generator
+
+# ヘルプを表示
+python run_sample.py --help
+```
+
+### 富士山ジェネレーターの機能
+
+`mount_fuji_generator.py`では以下の機能を実演：
+
+- **🎨 アートスタイル選択**: 日本画、浮世絵、水墨画、水彩画、写真的リアリズム
+- **🌸 季節変化**: 春の桜、秋の紅葉、冬の雪景色、夏の緑
+- **🏔️ 動的構図**: 河口湖からの眺め、忠霊塔、田園風景、日本庭園
+- **🎨 色彩パレット**: ソフトパステル、劇的な夕焼け、モノクロ調、アース系
+- **✨ 大気効果**: レンズフレア、ボケ、ボリュメトリックライティング、大気のかすみ
+- **⛩️ 伝統的要素**: 鳥居、日本の書道、金箔アクセント
+- **🔄 ネストワイルドカード**: ワイルドカード参照を使った複雑な構図
+- **🎲 重み付き選択**: 異なるスタイルと季節のバランスの取れた確率
+- **📊 スマート構造**: 整理されたプロンプトセクションのためのBREAK記法
+
+### サンプル出力
+
+```
+=== Mount Fuji Artwork Generation Demo ===
+
+【Style】: ukiyo-e woodblock print
+【Season】: spring with cherry blossoms  
+【Composition】: reflection in lake waters
+【Colors】: soft pastel colors
+【Mood】: serene and peaceful
+【Resolution】: 1280x720
+
+【Positive Prompt】 (385 characters):
+Mount Fuji, reflection in lake waters
+BREAK
+ukiyo-e woodblock print, masterpiece, fine art
+BREAK
+spring with cherry blossoms, sunrise golden light, soft pastel colors
+BREAK
+blooming sakura trees, traditional torii gate
+BREAK
+gentle bokeh effect, atmospheric haze
+BREAK
+serene and peaceful, intricate brush strokes, delicate cloud formations
+BREAK
+1280x720, fine art
+
+【Statistics】:
+- Number of wildcards used: 6
+- Foreground elements: 2
+- Artistic details: 3
+- Traditional elements: None
+- Atmospheric effects: 2
+```
+
+### 独自スクリプトの作成
+
+`run_sample.py`ラッパーを使用することで、独自のプロンプト生成スクリプトを作成・実行できます：
+
+1. `sample_scripts/`ディレクトリに新しいPythonファイルを作成
+2. インポートなしでPyPromptGeneratorの全ユーティリティ関数を使用
+3. スクリプトを実行：`python run_sample.py your_script_name`
+
 ## 機能
 
 ### 🎯 **PyPromptGeneratorノード**
@@ -75,56 +154,63 @@ Pythonスクリプトを使用して動的なプロンプト生成を可能に�
 `wildcards/`ディレクトリにテキストファイルを作成：
 ```
 wildcards/
-├── styles.txt
-├── colors.txt
-├── subjects.txt
-├── effects.txt
-└── moods.txt
+├── fuji_colors.txt                  # 富士山の色彩パレット
+├── fuji_compositions.txt            # 構図とビューポイント
+├── fuji_compositions_complex.txt    # ネストワイルドカード構図
+├── fuji_details.txt                 # 芸術的詳細と効果
+├── fuji_foreground.txt              # 前景要素
+├── fuji_seasons.txt                 # 季節と天候条件
+├── mount_fuji_styles.txt            # 富士山用アートスタイル
+└── your_custom_wildcards.txt        # 独自のワイルドカードファイルを追加
 ```
+
+プロジェクトには例として富士山テーマのワイルドカードファイルが含まれていますが、任意の題材用に独自のワイルドカードファイルを作成できます。
 
 ### ファイル形式
 各ワイルドカードファイルは1行に1つのアイテムを含む必要があります：
 
-**例: `wildcards/styles.txt`**
+**例: `wildcards/mount_fuji_styles.txt`**
 ```
-photorealistic
-anime
-oil painting
-watercolor
-digital art
-concept art
-impressionist
-abstract
-minimalist
-vintage
-```
-
-**例: `wildcards/colors.txt`**
-```
-vibrant red
-deep blue
-golden yellow
-emerald green
-purple
-silver
-rose gold
-coral pink
-midnight black
-pristine white
+traditional Japanese painting
+ukiyo-e woodblock print
+sumi-e ink painting
+watercolor landscape
+oil painting masterpiece
+digital art concept
+photorealistic landscape
+anime landscape style
+studio ghibli style
+minimalist landscape
+impressionist painting
+vintage postcard style
 ```
 
-**例: `wildcards/subjects.txt`**
+**例: `wildcards/fuji_colors.txt`**
 ```
-beautiful woman
-handsome man
-cute cat
-majestic dragon
-fantasy castle
-cyberpunk city
-ancient temple
-mystical forest
-space station
-alien landscape
+soft pastel colors
+vibrant autumn hues
+monochromatic blue tones
+warm golden lighting
+cool morning blues
+dramatic sunset oranges
+ethereal misty whites
+deep forest greens
+pristine snow whites
+rich earth tones
+```
+
+**例: `wildcards/fuji_seasons.txt`**
+```
+spring with cherry blossoms
+summer with lush greenery
+autumn with red maple leaves
+winter with snow-capped peak
+early morning mist
+sunset golden hour
+clear blue sky day
+dramatic storm clouds
+moonlit night scene
+dawn breaking over mountains
 ```
 
 ### 高度なワイルドカード機能
@@ -167,12 +253,13 @@ epic
 #### ネストワイルドカード（上級者向け）
 `{wildcard_name}`構文を使用してワイルドカードファイル内で他のワイルドカードファイルを参照可能：
 
-**例: `wildcards/characters.txt`**
+**例: `wildcards/fuji_compositions_complex.txt`**
 ```
-{styles} style warrior
-{colors} haired mage
-ancient {subjects}
-mighty {colors} {subjects}
+{mount_fuji_styles} of Mount Fuji in {fuji_seasons}
+{fuji_compositions} with {fuji_foreground} in foreground
+{fuji_colors} Mount Fuji landscape with {fuji_details}
+traditional Japanese {mount_fuji_styles} featuring {fuji_foreground}
+{fuji_seasons} Mount Fuji scene with {fuji_compositions}
 ```
 
 **ネストワイルドカードの動作:**
@@ -183,8 +270,8 @@ mighty {colors} {subjects}
 - 無効な参照は警告付きでそのまま残されます
 
 **展開例:**
-- `{styles} style warrior` は `"anime style warrior"` や `"realistic style warrior"` になる可能性
-- `mighty {colors} {subjects}` は `"mighty red dragon"` や `"mighty blue castle"` になる可能性
+- `{mount_fuji_styles} of Mount Fuji in {fuji_seasons}` は `"ukiyo-e woodblock print of Mount Fuji in spring with cherry blossoms"` になる可能性
+- `{fuji_colors} Mount Fuji landscape with {fuji_details}` は `"dramatic sunset oranges Mount Fuji landscape with intricate brush strokes"` になる可能性
 
 ### スクリプトでのワイルドカード使用
 
@@ -192,31 +279,32 @@ mighty {colors} {subjects}
 
 ```python
 # ワイルドカード変数は自動的に利用可能
-# _styles, _colors, _subjects, _effects, _moods
+# _mount_fuji_styles, _fuji_colors, _fuji_seasons, etc.
 
 # 基本的な使用法
-selected_style = choice(_styles)
-selected_color = choice(_colors)
-selected_subject = choice(_subjects)
+selected_style = choice(_mount_fuji_styles)
+selected_color = choice(_fuji_colors)
+selected_season = choice(_fuji_seasons)
 
-positive_prompt = f"{selected_style}, {selected_color} {selected_subject}"
+positive_prompt = f"{selected_style}, {selected_color}, {selected_season}"
 
 # 複数選択を使った高度な使用法
-style_combo = choice(_styles, count=2)  # 2つの異なるスタイルを取得
-effect_stack = choice(_effects, count=3)  # 3つの異なるエフェクトを取得
+style_combo = choice(_mount_fuji_styles, count=2)  # 2つの異なるスタイルを取得
+details = choice(_fuji_details, count=3)  # 3つの異なる詳細を取得
 
-positive_prompt = f"{join(style_combo)}, {selected_subject}, {join(effect_stack)}"
+positive_prompt = f"{join(style_combo)}, Mount Fuji, {join(details)}"
 
-# 条件付き使用
-if random_boolean(0.8):
-    mood = choice(_moods)
-    positive_prompt += f", {mood}"
+# 季節要素との条件付き使用
+if "spring" in selected_season:
+    foreground = choice(_fuji_foreground)
+    positive_prompt += f", {foreground}"
 
 # 使用前にワイルドカードの存在確認
-if '_styles' in globals():
-    style = choice(_styles)
+if '_fuji_compositions_complex' in globals():
+    complex_comp = choice(_fuji_compositions_complex)
+    positive_prompt = complex_comp
 else:
-    style = "realistic"  # フォールバック
+    composition = "majestic view from Lake Kawaguchi"  # フォールバック
 ```
 
 ### ワイルドカード管理関数
@@ -247,25 +335,27 @@ custom_wildcards = load_wildcards("/path/to/custom/wildcards")
 **ワイルドカードが見つからない:**
 ```python
 # 常にワイルドカードの存在を確認
-if '_mystyles' in globals():
-    style = choice(_mystyles)
+if '_mount_fuji_styles' in globals():
+    style = choice(_mount_fuji_styles)
 else:
-    print("ワイルドカード _mystyles が見つかりません")
-    style = "default"
+    print("ワイルドカード _mount_fuji_styles が見つかりません")
+    style = "traditional Japanese painting"
 ```
 
 **変更後のリロード:**
 ```python
 # ワイルドカードファイルを修正した場合は強制リロード
 refresh_wildcards()
-selected_item = choice(_styles)  # 更新されたファイルを使用
+selected_item = choice(_fuji_colors)  # 更新されたファイルを使用
 ```
 
 ### 🔧 **開発者向け機能**
-- **包括的テスト**: 60以上のテストケースを含む完全なテストスイート
+- **包括的テスト**: 全機能をカバーする94のテストケースを含む完全なテストスイート
 - **型安全性**: 適切な型ヒント付きMyPy互換
 - **コード品質**: Ruffリンティングとpre-commitフック
 - **ドキュメント**: 豊富なインラインドキュメントと例
+- **サンプルスクリプト**: 全機能を実演する完全な富士山アートジェネレーター
+- **スクリプトラッパー**: テストと開発用の使いやすい`run_sample.py`
 
 ## 使用例
 
@@ -350,19 +440,19 @@ positive_prompt = join(elements)
 ### ネストワイルドカードの使用
 ```python
 # ネスト参照付きワイルドカードファイルを作成
-# styles.txt: realistic, anime, oil painting
-# colors.txt: red, blue, golden
-# characters.txt: {styles} {colors} warrior, mystical {colors} mage
+# mount_fuji_styles.txt: traditional Japanese painting, ukiyo-e woodblock print, sumi-e ink painting
+# fuji_colors.txt: soft pastel colors, dramatic sunset oranges, monochromatic blue tones
+# fuji_compositions_complex.txt: {mount_fuji_styles} of Mount Fuji in {fuji_seasons}
 
 # スクリプトでネストワイルドカードを使用
-if '_characters' in globals():
-    character = choice(_characters)
-    # 結果例: "anime red warrior" や "mystical golden mage"
-    positive_prompt = f"{character}, detailed artwork"
+if '_fuji_compositions_complex' in globals():
+    complex_composition = choice(_fuji_compositions_complex)
+    # 結果例: "ukiyo-e woodblock print of Mount Fuji in spring with cherry blossoms"
+    positive_prompt = f"{complex_composition}, masterpiece, highly detailed"
 else:
-    positive_prompt = "fantasy character, detailed artwork"
+    positive_prompt = "Mount Fuji landscape, masterpiece, highly detailed"
 
-negative_prompt = "low quality, blurry"
+negative_prompt = "low quality, blurry, modern buildings"
 ```
 
 ## 開発
@@ -383,7 +473,7 @@ pre-commit install
 
 ### テストの実行
 
-プロジェクトには包括的なテストカバレッジが含まれています：
+プロジェクトには94のテストケースからなる包括的なテストカバレッジが含まれています：
 
 ```bash
 # すべてのテストを実行
@@ -396,7 +486,20 @@ pytest -m slow          # 低速テストのみ
 
 # カバレッジ付きで実行
 pytest --cov=src --cov-report=html
+
+# 詳細出力でテストを実行
+pytest -v
 ```
+
+テストカテゴリには以下が含まれます：
+- **choice関数テスト** (17テスト) - 重み付き選択、複数選択、エッジケース
+- **ユーティリティ関数テスト** (20テスト) - `maybe`、`flatten`、`join`を含む全ユーティリティ関数
+- **ネストワイルドカードテスト** (9テスト) - 高度なワイルドカード機能
+- **統合テスト** (13テスト) - ComfyUIノード統合と複雑なシナリオ
+- **ワイルドカードテスト** (10テスト) - ワイルドカード読み込み、キャッシュ、管理
+- **ファイルジェネレーターテスト** (8テスト) - ファイルベーススクリプト実行
+- **flatten関数テスト** (13テスト) - 様々なシナリオでの配列平坦化
+- **その他の専門テスト** (4テスト) - 追加エッジケースと機能
 
 ### コード品質
 
@@ -413,9 +516,11 @@ pytest --cov=src --cov-report=html
 ComfyUI-PyPromptGenerator/
 ├── src/pyprompt_generator/           # メインパッケージ
 │   ├── nodes.py                     # ComfyUIノード実装
-│   ├── utils.py                     # ユーティリティ関数
+│   ├── utils.py                     # ネストワイルドカード付きユーティリティ関数
 │   └── __init__.py                  # パッケージ初期化
-├── tests/                           # テストスイート
+├── sample_scripts/                   # サンプルスクリプトとデモ
+│   └── mount_fuji_generator.py      # 包括的な富士山アートジェネレーターデモ
+├── tests/                           # 包括的テストスイート（94テスト）
 │   ├── test_choice.py               # choice関数テスト
 │   ├── test_file_generator.py       # ファイルジェネレーターノードテスト
 │   ├── test_flatten.py              # flatten関数テスト
@@ -425,20 +530,23 @@ ComfyUI-PyPromptGenerator/
 │   ├── test_wildcard.py             # ワイルドカード関数テスト
 │   ├── test_wildcard_manager.py     # WildcardManagerテスト
 │   ├── conftest.py                  # テスト設定
-│   ├── pytest.ini                   # Pytest設定
-│   └── sample_scripts/              # サンプルテストスクリプト
-├── wildcards/                       # ワイルドカードファイル例
-│   ├── colors.txt                   # 色のワイルドカード例
-│   ├── compositions.txt             # ネストワイルドカード構成
-│   ├── styles.txt                   # スタイルワイルドカード例
-│   ├── subjects.txt                 # 被写体ワイルドカード例
-│   └── create_wildcards_here        # プレースホルダーファイル
+│   └── pytest.ini                   # Pytest設定
+├── wildcards/                       # 富士山テーマワイルドカードファイル
+│   ├── fuji_colors.txt              # 富士山用色彩パレット
+│   ├── fuji_compositions.txt        # 構図とビューポイント
+│   ├── fuji_compositions_complex.txt # ネストワイルドカード構図
+│   ├── fuji_details.txt             # 芸術的詳細と効果
+│   ├── fuji_foreground.txt          # 前景要素
+│   ├── fuji_seasons.txt             # 季節と天候
+│   ├── mount_fuji_styles.txt        # 富士山用アートスタイル
+│   └── create_wildcards_here        # カスタムワイルドカード用プレースホルダー
+├── run_sample.py                    # サンプルスクリプト実行ラッパー
 ├── .github/                         # GitHub設定
-│   ├── workflows/                   # CI/CDワークフロー
-│   └── ISSUE_TEMPLATE.md            # イシューテンプレート
+│   └── workflows/                   # CI/CDワークフロー
+├── .vscode/                         # VS Code設定
 ├── pyproject.toml                   # プロジェクト設定
 ├── MANIFEST.in                      # パッケージマニフェスト
-├── LICENSE                          # ライセンスファイル
+├── LICENSE                          # MITライセンス
 ├── README.md                        # ドキュメント（英語）
 └── README-JA.md                     # ドキュメント（日本語）
 ```
