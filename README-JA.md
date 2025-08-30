@@ -11,13 +11,9 @@ Pythonスクリプトを使用して動的なプロンプト生成を可能に�
 
 ## インストール
 
-### オプション1: ComfyUI Manager（推奨）
-1. [ComfyUI](https://docs.comfy.org/get_started)をインストール
-2. [ComfyUI-Manager](https://github.com/ltdrdata/ComfyUI-Manager)をインストール
-3. ComfyUI-Managerで「PyPromptGenerator」を検索してインストール
-4. ComfyUIを再起動
+⚠️ **重要な注意事項**: このカスタムノードは動的スクリプトの実行にPythonの`exec()`関数を使用しており、コード実行安全性に関するComfyUIカスタムノードガイドラインに適合しない可能性があります。参考として[ComfyUI Registry Standards](https://docs.comfy.org/registry/standards#eval%2Fexec-calls)をご確認ください。インストール前にセキュリティ要件をご確認の上、自己責任でご使用ください。
 
-### オプション2: 手動インストール
+### 手動インストール
 1. ComfyUIのインストールディレクトリに移動
 2. `custom_nodes/`フォルダに移動
 3. このリポジトリをクローン：
@@ -110,7 +106,7 @@ BREAK
 ### 🎯 **PyPromptGeneratorノード**
 - **インラインPythonスクリプト**: ノード内で直接プロンプト生成ロジックを記述
 - **豊富なユーティリティ関数**: 重み付き選択、リスト操作、ランダム化のための組み込み関数
-- **サンドボックス実行**: Pythonの機能への制御されたアクセスによる安全な実行環境
+- **スクリプト実行**: Pythonの`exec()`を使用した動的スクリプト実行（上記のセキュリティ注意事項を参照）
 
 ### 📁 **PyPromptFileGeneratorノード**
 - **外部スクリプトファイル**: ファイルからPythonスクリプトを読み込んで実行
@@ -629,21 +625,6 @@ FileNotFoundError: Script file not found
 - 複雑なロジックにはファイルベーススクリプトを使用して再コンパイルを避ける
 - ワイルドカード集約的ワークフローではキャッシュを有効化
 - 両ノードとも動的コンテンツのため毎回実行時に自動更新
-
-## レジストリへの公開
-
-## レジストリへの公開
-
-このカスタムノードをコミュニティの他の人と共有したい場合は、レジストリに公開できます。`pyproject.toml`の`tool.comfy`セクションにはすでにいくつかのフィールドが自動入力されていますが、正しいことを再確認してください。
-
-https://registry.comfy.org でアカウントを作成し、APIキートークンを作成する必要があります。
-
-- [ ] [レジストリ](https://registry.comfy.org)にアクセス。ログインしてパブリッシャーID（レジストリプロフィールの`@`記号の後のすべて）を作成
-- [ ] パブリッシャーIDをpyproject.tomlファイルに追加
-- [ ] GithubからのパブリッシングのためにレジストリでAPIキーを作成。[手順](https://docs.comfy.org/registry/publishing#create-an-api-key-for-publishing)
-- [ ] Githubリポジトリシークレットに`REGISTRY_ACCESS_TOKEN`として追加
-
-Githubアクションはgit pushの度に実行されます。Githubアクションを手動で実行することも可能です。完全な手順は[こちら](https://docs.comfy.org/registry/publishing)。質問がある場合は[discord](https://discord.com/invite/comfyorg)に参加してください！
 
 ## ライセンス
 

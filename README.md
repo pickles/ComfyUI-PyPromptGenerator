@@ -11,13 +11,9 @@ Perfect for scenarios where you need:
 
 ## Installation
 
-### Option 1: ComfyUI Manager (Recommended)
-1. Install [ComfyUI](https://docs.comfy.org/get_started)
-2. Install [ComfyUI-Manager](https://github.com/ltdrdata/ComfyUI-Manager)
-3. Search for "PyPromptGenerator" in ComfyUI-Manager and install
-4. Restart ComfyUI
+⚠️ **Important Notice**: This custom node uses Python's `exec()` function to execute dynamic scripts, which may not comply with some ComfyUI custom node guidelines regarding code execution safety. For reference, see the [ComfyUI Registry Standards](https://docs.comfy.org/registry/standards#eval%2Fexec-calls). Please review your security requirements before installation and use at your own discretion.
 
-### Option 2: Manual Installation
+### Manual Installation
 1. Navigate to your ComfyUI installation directory
 2. Go to `custom_nodes/` folder
 3. Clone this repository:
@@ -111,7 +107,7 @@ The `run_sample.py` wrapper allows you to create and run your own prompt generat
 - **Inline Python Scripts**: Write prompt generation logic directly in the node
 - **Rich Utility Functions**: Built-in functions for weighted selection, list manipulation, and randomization
 - **Always Refresh**: Option to regenerate prompts on every execution
-- **Safe Execution**: Sandboxed environment with controlled access to Python functionality
+- **Script Execution**: Uses Python's `exec()` for dynamic script execution (see security notice above)
 
 ### 📁 **PyPromptFileGenerator Node**
 - **External Script Files**: Load and execute Python scripts from files
@@ -628,19 +624,6 @@ FileNotFoundError: Script file not found
 - Use file-based scripts for complex logic to avoid recompilation
 - Enable caching for wildcard-heavy workflows
 - Both nodes automatically refresh on every execution for dynamic content
-
-## Publishing to Registry
-
-If you wish to share this custom node with others in the community, you can publish it to the registry. We've already auto-populated some fields in `pyproject.toml` under `tool.comfy`, but please double-check that they are correct.
-
-You need to make an account on https://registry.comfy.org and create an API key token.
-
-- [ ] Go to the [registry](https://registry.comfy.org). Login and create a publisher id (everything after the `@` sign on your registry profile). 
-- [ ] Add the publisher id into the pyproject.toml file.
-- [ ] Create an api key on the Registry for publishing from Github. [Instructions](https://docs.comfy.org/registry/publishing#create-an-api-key-for-publishing).
-- [ ] Add it to your Github Repository Secrets as `REGISTRY_ACCESS_TOKEN`.
-
-A Github action will run on every git push. You can also run the Github action manually. Full instructions [here](https://docs.comfy.org/registry/publishing). Join our [discord](https://discord.com/invite/comfyorg) if you have any questions!
 
 ## License
 
