@@ -1,0 +1,6 @@
+# Nested wildcard compositions using other wildcards
+{mount_fuji_styles} of Mount Fuji in {fuji_seasons}
+{fuji_compositions} with {fuji_foreground} in foreground
+{fuji_colors} Mount Fuji landscape with {fuji_details}
+traditional Japanese {mount_fuji_styles} featuring {fuji_foreground}
+{fuji_seasons} Mount Fuji scene with {fuji_compositions}
