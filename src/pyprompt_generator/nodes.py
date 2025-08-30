@@ -95,6 +95,7 @@ class PyPromptBaseNode:
             # Wildcard functionality (for backward compatibility)
             'load_wildcards': utils_module.load_wildcards,
             'get_wildcard_vars': utils_module.get_wildcard_vars,
+            'get_wildcard_vars_with_auto_refresh': utils_module.get_wildcard_vars_with_auto_refresh,
             'refresh_wildcards': utils_module.refresh_wildcards,
             # WildcardManager class
             'WildcardManager': utils_module.WildcardManager,
@@ -119,7 +120,8 @@ class PyPromptBaseNode:
         
         # Automatically add wildcard variables to global variables
         try:
-            wildcard_vars = utils_module.get_wildcard_vars()
+            # Use smart refresh that only refreshes when directory changes
+            wildcard_vars = utils_module.get_wildcard_vars_with_auto_refresh()
             global_vars.update(wildcard_vars)
             if wildcard_vars:
                 print(f"[{self._get_node_name()}] Loaded wildcard variables: {list(wildcard_vars.keys())}")

@@ -14,7 +14,7 @@ class TestWildcardManager:
         """Test WildcardManager initialization"""
         # Initialize with default path
         wm = WildcardManager()
-        assert wm.wildcard_dir.endswith('wildcard')
+        assert wm.wildcard_dir.endswith('wildcards')
         assert wm._cached_wildcards is None
         
         # Initialize with custom path

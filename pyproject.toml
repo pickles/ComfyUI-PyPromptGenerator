@@ -85,3 +85,8 @@ select = [
 
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = "double"
+
+[tool.pyright]
+include = ["src"]
+exclude = ["**/__pycache__"]
+ignore = ["sample_scripts"]

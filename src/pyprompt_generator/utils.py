@@ -514,6 +514,51 @@ def refresh_wildcards():
     return get_wildcard_vars()
 
 
+# Global variable to track wildcard directory state
+_wildcard_dir_state = None
+
+
+def get_wildcard_vars_with_auto_refresh():
+    """
+    Get wildcard variables with automatic refresh if directory has changed
+    This checks if new files have been added to the wildcards directory
+    
+    Returns:
+        dict: Dictionary of wildcard variables
+    """
+    global _cached_wildcards, _wildcard_dir_state
+    
+    # Find wildcard directory
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    custom_node_root = os.path.dirname(os.path.dirname(current_dir))
+    wildcard_dir = os.path.join(custom_node_root, 'wildcards')
+    
+    if not os.path.exists(wildcard_dir):
+        return _cached_wildcards or {}
+    
+    try:
+        # Get current directory state (list of .txt files and their modification times)
+        txt_files = glob.glob(os.path.join(wildcard_dir, "*.txt"))
+        current_state = {}
+        for file_path in txt_files:
+            try:
+                current_state[file_path] = os.path.getmtime(file_path)
+            except OSError:
+                pass  # File might have been deleted between glob and getmtime
+        
+        # Check if directory state has changed
+        if _wildcard_dir_state != current_state:
+            print("[Wildcards] Directory changed, refreshing wildcard cache...")
+            _wildcard_dir_state = current_state
+            _cached_wildcards = None
+            
+    except Exception as e:
+        print(f"[Wildcards] Warning: Could not check directory state: {e}")
+    
+    # Return cached or freshly loaded wildcards
+    return get_wildcard_vars()
+
+
 def flatten(nested_list, depth=None):
     """
     Flatten nested arrays into a one-dimensional array
