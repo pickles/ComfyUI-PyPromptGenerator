@@ -273,9 +273,11 @@ def load_wildcards(wildcard_dir=None):
         - Nested wildcards supported: {wildcard_name} will be replaced with random selection
     """
     if wildcard_dir is None:
-        # Find wildcard folder based on current script directory
+        # Find wildcard folder based on custom node root directory
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        wildcard_dir = os.path.join(current_dir, 'wildcard')
+        # Go up two levels: utils.py -> pyprompt_generator -> src -> custom_node_root
+        custom_node_root = os.path.dirname(os.path.dirname(current_dir))
+        wildcard_dir = os.path.join(custom_node_root, 'wildcards')
     
     wildcards = {}
     
@@ -383,10 +385,11 @@ class WildcardManager:
             wildcard_dir: Path to wildcard folder (auto-detected if omitted)
         """
         if wildcard_dir is None:
-            # Find wildcard folder based on current script directory
+            # Find wildcard folder based on custom node root directory
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            # Default to 'wildcard' to keep consistent with load_wildcards()
-            wildcard_dir = os.path.join(current_dir, 'wildcard')
+            # Go up two levels: utils.py -> pyprompt_generator -> src -> custom_node_root
+            custom_node_root = os.path.dirname(os.path.dirname(current_dir))
+            wildcard_dir = os.path.join(custom_node_root, 'wildcards')
         
         self.wildcard_dir = wildcard_dir
         self._cached_wildcards = None
