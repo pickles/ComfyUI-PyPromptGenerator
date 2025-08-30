@@ -82,11 +82,24 @@ select = [
     "F",  # The "F" series in Ruff stands for "Pyflakes" rules, which catch various Python syntax errors and undefined names.
     # See all rules here: https://docs.astral.sh/ruff/rules/#pyflakes-f
 ]
+ignore = [
+    "F401",  # Ignore unused imports (they may be used dynamically)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/pyprompt_generator/nodes.py" = ["F401"]  # Allow unused imports in nodes.py (used dynamically)
 
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = "double"
 
 [tool.pyright]
 include = ["src"]
-exclude = ["**/__pycache__"]
+exclude = ["**/__pycache__", "sample_scripts"]
 ignore = ["sample_scripts"]
+reportMissingImports = true
+reportMissingTypeStubs = false
+reportUnusedImport = true
+reportUnusedClass = true
+reportUnusedFunction = true
+reportDuplicateImport = true
+pythonVersion = "3.10"

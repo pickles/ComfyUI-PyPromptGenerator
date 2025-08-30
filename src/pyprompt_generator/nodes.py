@@ -5,16 +5,13 @@ This module provides a custom node for ComfyUI that allows users to generate
 positive and negative prompts using Python scripts.
 """
 
-import sys
-import types
-import os
 from datetime import datetime
 
 # Support for relative imports in ComfyUI environment
 try:
-    from . import utils
+    from . import utils  # noqa: F401
 except ImportError:
-    import utils
+    import utils  # noqa: F401
 
 
 class PyPromptBaseNode:
@@ -71,8 +68,11 @@ class PyPromptBaseNode:
                 current_dir = os.path.dirname(os.path.abspath(__file__))
                 utils_path = os.path.join(current_dir, 'utils.py')
                 spec = importlib.util.spec_from_file_location("utils", utils_path)
-                utils_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(utils_module)
+                if spec is not None and spec.loader is not None:
+                    utils_module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(utils_module)
+                else:
+                    raise ImportError("Could not load utils module")
         
         global_vars = {
             '__builtins__': safe_builtins,

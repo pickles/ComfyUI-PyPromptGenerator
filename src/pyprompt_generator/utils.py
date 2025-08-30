@@ -476,8 +476,11 @@ class WildcardManager:
         """
         if target_globals is None:
             import inspect
-            frame = inspect.currentframe().f_back
-            target_globals = frame.f_globals
+            frame = inspect.currentframe()
+            if frame is not None and frame.f_back is not None:
+                target_globals = frame.f_back.f_globals
+            else:
+                raise RuntimeError("Could not determine caller's globals")
         
         wildcard_vars = self.get_wildcard_vars()
         target_globals.update(wildcard_vars)
