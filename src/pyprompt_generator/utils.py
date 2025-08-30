@@ -270,6 +270,7 @@ def load_wildcards(wildcard_dir=None):
         - Lines starting with # (comment lines) are ignored
         - Filenames are prefixed with underscore (_)
         - Extensions (.txt) are removed
+        - Nested wildcards supported: {wildcard_name} will be replaced with random selection
     """
     if wildcard_dir is None:
         # Find wildcard folder based on current script directory
@@ -285,6 +286,7 @@ def load_wildcards(wildcard_dir=None):
     # Get all .txt files in wildcard folder
     txt_files = glob.glob(os.path.join(wildcard_dir, "*.txt"))
     
+    # First pass: Load all files without processing nested wildcards
     for file_path in txt_files:
         try:
             # Remove extension from filename and add underscore prefix
@@ -308,7 +310,63 @@ def load_wildcards(wildcard_dir=None):
         except Exception as e:
             print(f"Error loading wildcard file {file_path}: {e}")
     
+    # Second pass: Process nested wildcards
+    _expand_nested_wildcards(wildcards)
+    
     return wildcards
+
+
+def _expand_nested_wildcards(wildcards):
+    """
+    Expand nested wildcard references in wildcard entries
+    
+    Args:
+        wildcards: Dictionary of wildcard variables to process in-place
+        
+    Notes:
+        - Processes {wildcard_name} patterns
+        - Handles multiple references per line
+        - Prevents infinite recursion
+    """
+    import re
+    
+    # Pattern to match {wildcard_name}
+    pattern = re.compile(r'\{([^}]+)\}')
+    
+    for var_name, entries in wildcards.items():
+        expanded_entries = []
+        
+        for entry in entries:
+            # Find all wildcard references in this entry
+            matches = pattern.findall(entry)
+            
+            if matches:
+                # Process each wildcard reference
+                expanded_entry = entry
+                for match in matches:
+                    wildcard_ref = f"_{match}"  # Add underscore prefix
+                    
+                    if wildcard_ref in wildcards and wildcard_ref != var_name:  # Prevent self-reference
+                        # Replace with random selection from referenced wildcard
+                        try:
+                            replacement = choice(wildcards[wildcard_ref])
+                            expanded_entry = expanded_entry.replace(f"{{{match}}}", replacement)
+                        except Exception as e:
+                            print(f"Warning: Could not expand wildcard {{{match}}} in {var_name}: {e}")
+                            # Leave the reference as-is if expansion fails
+                    else:
+                        if wildcard_ref == var_name:
+                            print(f"Warning: Self-reference detected in {var_name}: {{{match}}}")
+                        else:
+                            print(f"Warning: Referenced wildcard not found: {{{match}}} in {var_name}")
+                
+                expanded_entries.append(expanded_entry)
+            else:
+                # No wildcard references, keep as-is
+                expanded_entries.append(entry)
+        
+        # Update the entries with expanded versions
+        wildcards[var_name] = expanded_entries
 
 
 class WildcardManager:
@@ -349,6 +407,7 @@ class WildcardManager:
         # Get all .txt files in wildcard folder
         txt_files = glob.glob(os.path.join(self.wildcard_dir, "*.txt"))
         
+        # First pass: Load all files without processing nested wildcards
         for file_path in txt_files:
             try:
                 # Remove extension from filename and add underscore prefix
@@ -371,6 +430,11 @@ class WildcardManager:
                 
             except Exception as e:
                 print(f"[WildcardManager] Error loading file {file_path}: {e}")
+        
+        # Second pass: Process nested wildcards
+        _expand_nested_wildcards(wildcards)
+        
+        return wildcards
         
         return wildcards
     

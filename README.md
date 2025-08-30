@@ -1,4 +1,4 @@
-# PyPromptGenerator
+# ComfyUI PyPromptGenerator Node
 
 A powerful custom node for ComfyUI that enables dynamic prompt generation using Python scripts. This extension allows you to create sophisticated positive and negative prompts through scripting, offering more flexibility and control than traditional static prompts.
 
@@ -67,6 +67,200 @@ All nodes include access to specialized utility functions:
 - **Dynamic Loading**: Automatically load wildcard files from directories
 - **Caching**: Efficient wildcard processing with smart caching
 - **Nested Support**: Use wildcards within wildcards for complex structures
+
+## Creating Wildcard Files
+
+Wildcard files allow you to define reusable lists of terms that can be randomly selected in your prompts. The system automatically loads `.txt` files from the `wildcards/` directory.
+
+### File Structure
+Create text files in the `wildcards/` directory:
+```
+wildcards/
+├── styles.txt
+├── colors.txt
+├── subjects.txt
+├── effects.txt
+└── moods.txt
+```
+
+### File Format
+Each wildcard file should contain one item per line:
+
+**Example: `wildcards/styles.txt`**
+```
+photorealistic
+anime
+oil painting
+watercolor
+digital art
+concept art
+impressionist
+abstract
+minimalist
+vintage
+```
+
+**Example: `wildcards/colors.txt`**
+```
+vibrant red
+deep blue
+golden yellow
+emerald green
+purple
+silver
+rose gold
+coral pink
+midnight black
+pristine white
+```
+
+**Example: `wildcards/subjects.txt`**
+```
+beautiful woman
+handsome man
+cute cat
+majestic dragon
+fantasy castle
+cyberpunk city
+ancient temple
+mystical forest
+space station
+alien landscape
+```
+
+### Advanced Wildcard Features
+
+#### Weighted Entries
+Add weights to entries using the `weight::item` format:
+```
+# effects.txt
+10::highly detailed
+5::masterpiece
+3::professional
+2::cinematic lighting
+1::award winning
+```
+
+#### Comments and Empty Lines
+- Lines starting with `#` are treated as comments and ignored
+- Empty lines are automatically filtered out
+- Use comments to organize your wildcard files
+
+**Example: `wildcards/moods.txt`**
+```
+# Positive moods
+cheerful
+serene
+confident
+playful
+
+# Neutral moods
+calm
+focused
+contemplative
+
+# Intense moods
+dramatic
+mysterious
+epic
+```
+
+#### Nested Wildcards (Advanced)
+You can reference other wildcard files within wildcard files using `{wildcard_name}` syntax:
+
+**Example: `wildcards/characters.txt`**
+```
+{styles} style warrior
+{colors} haired mage
+ancient {subjects}
+mighty {colors} {subjects}
+```
+
+**How Nested Wildcards Work:**
+- Use `{wildcard_name}` to reference another wildcard file (without the underscore prefix)
+- Multiple references per line are supported
+- Each reference is replaced with a random selection from the referenced wildcard
+- Self-references are detected and prevented
+- Invalid references are left as-is with a warning
+
+**Example expansion:**
+- `{styles} style warrior` might become `"anime style warrior"` or `"realistic style warrior"`
+- `mighty {colors} {subjects}` might become `"mighty red dragon"` or `"mighty blue castle"`
+
+### Using Wildcards in Scripts
+
+Wildcard files are automatically loaded as variables prefixed with `_`:
+
+```python
+# Wildcard variables are automatically available
+# _styles, _colors, _subjects, _effects, _moods
+
+# Basic usage
+selected_style = choice(_styles)
+selected_color = choice(_colors)
+selected_subject = choice(_subjects)
+
+positive_prompt = f"{selected_style}, {selected_color} {selected_subject}"
+
+# Advanced usage with multiple selections
+style_combo = choice(_styles, count=2)  # Get 2 different styles
+effect_stack = choice(_effects, count=3)  # Get 3 different effects
+
+positive_prompt = f"{join(style_combo)}, {selected_subject}, {join(effect_stack)}"
+
+# Conditional usage
+if random_boolean(0.8):
+    mood = choice(_moods)
+    positive_prompt += f", {mood}"
+
+# Check if wildcard exists before using
+if '_styles' in globals():
+    style = choice(_styles)
+else:
+    style = "realistic"  # fallback
+```
+
+### Wildcard Management Functions
+
+```python
+# Reload wildcard files (useful during development)
+refresh_wildcards()
+
+# Get all available wildcard variables
+wildcard_vars = get_wildcard_vars()
+print(f"Available wildcards: {list(wildcard_vars.keys())}")
+
+# Load wildcards from custom directory
+custom_wildcards = load_wildcards("/path/to/custom/wildcards")
+```
+
+### Best Practices
+
+1. **Organize by Category**: Create separate files for different types of content
+2. **Use Descriptive Names**: File names become variable names (`styles.txt` → `_styles`)
+3. **Include Weights**: Use weights for more control over selection probability
+4. **Document with Comments**: Use `#` comments to organize and explain entries
+5. **Test Combinations**: Ensure wildcard combinations make sense together
+6. **Version Control**: Keep wildcard files in version control for team projects
+
+### Troubleshooting Wildcards
+
+**Wildcard not found:**
+```python
+# Always check if wildcard exists
+if '_mystyles' in globals():
+    style = choice(_mystyles)
+else:
+    print("Wildcard _mystyles not found")
+    style = "default"
+```
+
+**Reload after changes:**
+```python
+# Force reload if you've modified wildcard files
+refresh_wildcards()
+selected_item = choice(_styles)  # Now uses updated file
+```
 
 ### 🔧 **Developer Features**
 - **Comprehensive Tests**: Full test suite with 60+ test cases
@@ -154,6 +348,24 @@ positive_prompt = join(elements)
 # Result: "portrait of a woman\nBREAK\nred hair, blue eyes\nBREAK\nphotorealistic, high detail"
 ```
 
+### Using Nested Wildcards
+```python
+# Create wildcard files with nested references
+# styles.txt: realistic, anime, oil painting
+# colors.txt: red, blue, golden
+# characters.txt: {styles} {colors} warrior, mystical {colors} mage
+
+# Use nested wildcards in script
+if '_characters' in globals():
+    character = choice(_characters)
+    # Might result in: "anime red warrior" or "mystical golden mage"
+    positive_prompt = f"{character}, detailed artwork"
+else:
+    positive_prompt = "fantasy character, detailed artwork"
+
+negative_prompt = "low quality, blurry"
+```
+
 ## Development
 
 ### Setting up Development Environment
@@ -198,18 +410,36 @@ This project uses several tools to maintain code quality:
 
 ```
 ComfyUI-PyPromptGenerator/
-├── src/pyprompt_generator/    # Main package
-│   ├── nodes.py              # ComfyUI node implementations
-│   ├── utils.py              # Utility functions
-│   └── __init__.py           # Package initialization
-├── tests/                    # Test suite
-│   ├── test_choice.py        # Choice function tests
-│   ├── test_utils.py         # Utility function tests
-│   ├── test_integration.py   # Integration tests
-│   └── conftest.py          # Test configuration
-├── wildcards/               # Example wildcard files
-├── pyproject.toml          # Project configuration
-└── README.md              # This file
+├── src/pyprompt_generator/           # Main package
+│   ├── nodes.py                     # ComfyUI node implementations
+│   ├── utils.py                     # Utility functions
+│   └── __init__.py                  # Package initialization
+├── tests/                           # Test suite
+│   ├── test_choice.py               # Choice function tests
+│   ├── test_file_generator.py       # File generator node tests
+│   ├── test_flatten.py              # Flatten function tests
+│   ├── test_integration.py          # Integration tests
+│   ├── test_nested_wildcards.py     # Nested wildcard tests
+│   ├── test_utils.py                # Utility function tests
+│   ├── test_wildcard.py             # Wildcard function tests
+│   ├── test_wildcard_manager.py     # WildcardManager tests
+│   ├── conftest.py                  # Test configuration
+│   ├── pytest.ini                   # Pytest configuration
+│   └── sample_scripts/              # Sample test scripts
+├── wildcards/                       # Example wildcard files
+│   ├── colors.txt                   # Color wildcard examples
+│   ├── compositions.txt             # Nested wildcard compositions
+│   ├── styles.txt                   # Style wildcard examples
+│   ├── subjects.txt                 # Subject wildcard examples
+│   └── create_wildcards_here        # Placeholder file
+├── .github/                         # GitHub configuration
+│   ├── workflows/                   # CI/CD workflows
+│   └── ISSUE_TEMPLATE.md            # Issue template
+├── pyproject.toml                   # Project configuration
+├── MANIFEST.in                      # Package manifest
+├── LICENSE                          # License file
+├── README.md                        # Documentation (English)
+└── README-JA.md                     # Documentation (Japanese)
 ```
 
 ## Contributing
