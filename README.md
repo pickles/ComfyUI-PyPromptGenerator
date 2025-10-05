@@ -118,10 +118,13 @@ The `run_sample.py` wrapper allows you to create and run your own prompt generat
 ### 🛠 **Powerful Utility Functions**
 All nodes include access to specialized utility functions:
 
-- **`choice(items, count=1)`** - Random selection with weighted support
+- **`choice(*items, count=1)`** - Random selection with weighted support (accepts iterables or positional values)
   ```python
-  # Basic selection
+    # Basic selection from an iterable (list, tuple, etc.)
   choice(["red", "blue", "green"])
+  
+    # Basic selection from positional values
+    choice("red", "blue", "green")
   
   # Weighted selection (red is 3x more likely)
   choice(["3::red", "1::blue", "1::green"])

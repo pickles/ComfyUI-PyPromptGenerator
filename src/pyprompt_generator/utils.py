@@ -9,15 +9,20 @@ import os
 import glob
 
 
-def choice(items, count=1):
+def choice(items, *additional_items, count=1):
     """
-    Extract random items from an array (supports weighted selection)
+    Extract random items from the provided candidates (supports weighted selection)
     
     Args:
-        items: Source array for extraction
-               For weighted items, use "weight::item" format
-               Example: ["1::item1", "2::item2", "item3"] → 1:2:1 ratio
-        count: Number of items to extract (default: 1)
+        items: The first collection or value to select from. This can be:
+            - An iterable (list/tuple/set) of candidates
+            - A single value (when using positional arguments)
+        *additional_items: Optional extra candidates supplied as positional arguments.
+            If the last positional argument is an integer (and ``count`` isn't explicitly
+            provided), it's treated as the number of items to select for backward compatibility
+            with ``choice(["a", "b"], 2)`` style calls.
+        count: Number of items to extract (default: 1). When greater than 1, the result is
+            returned as a list with unique selections.
             
     Returns:
         For count=1: Single item
@@ -26,15 +31,44 @@ def choice(items, count=1):
     Examples:
         >>> choice(["apple", "banana", "cherry"])
         'apple'  # Randomly selected
-        
+
         >>> choice(["2::apple", "1::banana", "cherry"], 2)
         ['apple', 'cherry']  # Weighted random selection of 2 items (no duplicates)
+
+        >>> choice("red", "blue", "green")
+        'blue'  # Direct variadic usage
         
         >>> choice(["3::common", "1::rare"])
         'common'  # common is selected with 3x probability
     """
-    if not items:
-        return None if count == 1 else []
+    # Determine the candidate pool and positional count override
+    positional_count = None
+    if (
+        additional_items
+        and count == 1
+        and isinstance(additional_items[-1], int)
+        and isinstance(items, (list, tuple, set))
+        and len(additional_items) == 1
+    ):
+        positional_count = additional_items[-1]
+        additional_items = additional_items[:-1]
+
+    candidates = []
+
+    if isinstance(items, (list, tuple, set)):
+        candidates.extend(items)
+    else:
+        candidates.append(items)
+
+    if additional_items:
+        candidates.extend(additional_items)
+
+    if not candidates:
+        actual_count = positional_count if positional_count is not None else count
+        return None if actual_count == 1 else []
+
+    if positional_count is not None:
+        count = positional_count
     
     # Parse weighted items
     weights = []
