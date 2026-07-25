@@ -9,7 +9,7 @@ from random import Random
 @dataclass(frozen=True)
 class Option:
     key: str
-    prompt: str
+    prompt: str | tuple[str, ...]
     tags: frozenset[str]
     weight: float = 1.0
     negative: str = ""
@@ -20,9 +20,10 @@ class Option:
 
 
 def option(key, prompt, *tags, weight=1.0, negative="", break_before=False):
-    """Create one selectable prompt fragment."""
+    """Create one selectable prompt fragment or group of fragments."""
     if weight <= 0:
         raise ValueError("Option weight must be greater than zero")
+    prompt = _normalize_fragments(prompt, "option")
     return Option(
         key,
         prompt,
@@ -36,23 +37,28 @@ def option(key, prompt, *tags, weight=1.0, negative="", break_before=False):
 @dataclass(frozen=True)
 class Condition:
     dimension: str
-    key: str | None = None
-    tag: str | None = None
+    keys: frozenset[str] = frozenset()
+    tags: frozenset[str] = frozenset()
+    match: str = "all"
 
     def matches(self, selection):
         selected = selection[self.dimension]
-        if self.key is not None and selected.key != self.key:
+        if self.keys and selected.key not in self.keys:
             return False
-        if self.tag is not None and not selected.has_tag(self.tag):
-            return False
+        if self.tags:
+            tag_matches = [selected.has_tag(tag) for tag in self.tags]
+            if self.match == "all" and not all(tag_matches):
+                return False
+            if self.match == "any" and not any(tag_matches):
+                return False
         return True
 
     def describe(self):
         criteria = []
-        if self.key is not None:
-            criteria.append(f"key={self.key}")
-        if self.tag is not None:
-            criteria.append(f"tag={self.tag}")
+        if self.keys:
+            criteria.append(f"keys(any)={sorted(self.keys)}")
+        if self.tags:
+            criteria.append(f"tags({self.match})={sorted(self.tags)}")
         return f"{self.dimension}({', '.join(criteria)})"
 
 
@@ -93,7 +99,10 @@ class Scene:
                 if selected.break_before and lines and lines[-1] != "BREAK":
                     lines.append("BREAK")
                 if selected.prompt:
-                    lines.append(selected.prompt)
+                    if isinstance(selected.prompt, str):
+                        lines.append(selected.prompt)
+                    else:
+                        lines.extend(selected.prompt)
 
         return self._render_lines(lines)
 
@@ -135,17 +144,57 @@ class ConstraintBuilder:
         self.resolve_dimension = resolve_dimension or (lambda dimension: dimension)
         self.return_target = return_target or program
 
-    def require(self, dimension, *, key=None, tag=None):
+    def require(
+        self,
+        dimension,
+        *,
+        key=None,
+        keys=None,
+        tag=None,
+        tags=None,
+        match="all",
+    ):
         dimension = self.resolve_dimension(dimension)
         self.program._add_rule(
-            Rule(self.trigger, self.program._condition(dimension, key, tag), "require")
+            Rule(
+                self.trigger,
+                self.program._condition(
+                    dimension,
+                    key,
+                    keys,
+                    tag,
+                    tags,
+                    match,
+                ),
+                "require",
+            )
         )
         return self.return_target
 
-    def forbid(self, dimension, *, key=None, tag=None):
+    def forbid(
+        self,
+        dimension,
+        *,
+        key=None,
+        keys=None,
+        tag=None,
+        tags=None,
+        match="all",
+    ):
         dimension = self.resolve_dimension(dimension)
         self.program._add_rule(
-            Rule(self.trigger, self.program._condition(dimension, key, tag), "forbid")
+            Rule(
+                self.trigger,
+                self.program._condition(
+                    dimension,
+                    key,
+                    keys,
+                    tag,
+                    tags,
+                    match,
+                ),
+                "forbid",
+            )
         )
         return self.return_target
 
@@ -173,8 +222,24 @@ class PromptBlock:
         self.program._add_break()
         return self
 
-    def when(self, dimension, *, key=None, tag=None):
-        trigger = self.program._condition(self._scope(dimension), key, tag)
+    def when(
+        self,
+        dimension,
+        *,
+        key=None,
+        keys=None,
+        tag=None,
+        tags=None,
+        match="all",
+    ):
+        trigger = self.program._condition(
+            self._scope(dimension),
+            key,
+            keys,
+            tag,
+            tags,
+            match,
+        )
         return ConstraintBuilder(
             self.program,
             trigger,
@@ -224,8 +289,20 @@ class PromptProgram:
         self._add_break()
         return self
 
-    def when(self, dimension, *, key=None, tag=None):
-        return ConstraintBuilder(self, self._condition(dimension, key, tag))
+    def when(
+        self,
+        dimension,
+        *,
+        key=None,
+        keys=None,
+        tag=None,
+        tags=None,
+        match="all",
+    ):
+        return ConstraintBuilder(
+            self,
+            self._condition(dimension, key, keys, tag, tags, match),
+        )
 
     def synth(self, seed=None):
         if self.elements and self.elements[-1][0] == "break":
@@ -259,28 +336,70 @@ class PromptProgram:
         self.elements.append(("dimension", name))
 
     def _add_fixed(self, value):
-        if isinstance(value, str):
-            fragments = [value]
-        elif isinstance(value, (list, tuple)):
-            fragments = value
-        else:
-            raise TypeError("fixed() accepts a string or a list of strings")
-
+        normalized = _normalize_fragments(value, "fixed")
+        fragments = [normalized] if isinstance(normalized, str) else normalized
         for fragment in fragments:
-            if not isinstance(fragment, str):
-                raise TypeError("fixed() accepts a string or a list of strings")
             if fragment:
                 self.elements.append(("fixed", fragment))
 
     def _add_break(self):
         self.elements.append(("break", None))
 
-    def _condition(self, dimension, key, tag):
+    def _condition(self, dimension, key, keys, tag, tags, match):
         if dimension not in self.dimensions:
             raise KeyError(f"Unknown dimension: {dimension}")
-        if key is None and tag is None:
-            raise ValueError("A condition requires key or tag")
-        return Condition(dimension, key, tag)
+        if key is not None and keys is not None:
+            raise ValueError("Use either key or keys, not both")
+        if tag is not None and tags is not None:
+            raise ValueError("Use either tag or tags, not both")
+        if match not in {"all", "any"}:
+            raise ValueError("match must be 'all' or 'any'")
+
+        if key is not None:
+            normalized_keys = frozenset([key])
+        elif keys is None:
+            normalized_keys = frozenset()
+        else:
+            if isinstance(keys, str):
+                raise TypeError("keys must be a list of strings")
+            try:
+                normalized_keys = frozenset(keys)
+            except TypeError as error:
+                raise TypeError("keys must be a list of strings") from error
+
+        if any(not isinstance(item, str) for item in normalized_keys):
+            raise TypeError("keys must be a list of strings")
+
+        if tag is not None:
+            normalized_tags = frozenset([tag])
+        elif tags is None:
+            normalized_tags = frozenset()
+        else:
+            if isinstance(tags, str):
+                raise TypeError("tags must be a list of strings")
+            try:
+                normalized_tags = frozenset(tags)
+            except TypeError as error:
+                raise TypeError("tags must be a list of strings") from error
+
+        if any(not isinstance(item, str) for item in normalized_tags):
+            raise TypeError("tags must be a list of strings")
+        if not normalized_keys and not normalized_tags:
+            raise ValueError("A condition requires key, keys, tag, or tags")
+        return Condition(dimension, normalized_keys, normalized_tags, match)
 
     def _add_rule(self, rule):
         self.rules.append(rule)
+
+
+def _normalize_fragments(value, function_name):
+    error_message = (
+        f"{function_name}() accepts a string or a list of strings"
+    )
+    if isinstance(value, str):
+        return value
+    if not isinstance(value, (list, tuple)):
+        raise TypeError(error_message)
+    if any(not isinstance(fragment, str) for fragment in value):
+        raise TypeError(error_message)
+    return tuple(fragment for fragment in value if fragment)
