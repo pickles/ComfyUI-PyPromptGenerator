@@ -265,14 +265,40 @@ class PyPromptFileGeneratorNode(PyPromptBaseNode):
         return self._execute_script(script, "PyPrompt File Generator", f"File: {full_path}")
 
 
+class ResolutionInputNode:
+    """Output a width and height, optionally swapping their values."""
+
+    RETURN_TYPES = ("INT", "INT")
+    RETURN_NAMES = ("width", "height")
+    FUNCTION = "execute"
+    CATEGORY = "utils"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "width": ("INT", {"default": 512, "min": 1, "max": 16384, "step": 1}),
+                "height": ("INT", {"default": 512, "min": 1, "max": 16384, "step": 1}),
+                "swap": ("BOOLEAN", {"default": False}),
+            }
+        }
+
+    def execute(self, width, height, swap):
+        if swap:
+            return (height, width)
+        return (width, height)
+
+
 NODE_CLASS_MAPPINGS = {
     "PyPromptGeneratorNode": PyPromptGeneratorNode,
-    "PyPromptFileGeneratorNode": PyPromptFileGeneratorNode
+    "PyPromptFileGeneratorNode": PyPromptFileGeneratorNode,
+    "ResolutionInputNode": ResolutionInputNode,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "PyPromptGeneratorNode": "PyPrompt Generator",
-    "PyPromptFileGeneratorNode": "PyPrompt Generator from File"
+    "PyPromptFileGeneratorNode": "PyPrompt Generator from File",
+    "ResolutionInputNode": "Resolution Input",
 }
 
 # Minimal Example node to satisfy template tests
