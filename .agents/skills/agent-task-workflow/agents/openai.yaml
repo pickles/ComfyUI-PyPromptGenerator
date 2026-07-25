@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Task Workflow"
+  short_description: "Coordinate handoffs and isolated worktrees"
+  default_prompt: "Use $agent-task-workflow to plan, implement, review, and close an isolated development task."
