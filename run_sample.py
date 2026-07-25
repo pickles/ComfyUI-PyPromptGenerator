@@ -68,12 +68,12 @@ Examples:
                        help='Name of the sample script to run (without .py extension)')
     parser.add_argument('--list', '-l', action='store_true',
                        help='List available sample scripts')
-    
+
     args = parser.parse_args()
-    
+
     script_dir = Path(__file__).parent
     sample_scripts_dir = script_dir / "sample_scripts"
-    
+
     # List available samples if requested
     if args.list:
         print("Available sample scripts:")
@@ -84,48 +84,48 @@ Examples:
         else:
             print("  No sample_scripts directory found")
         return 0
-    
+
     # Check if sample name is provided
     if not args.sample_name:
         print("Error: Please specify a sample script name")
         print("Use --list to see available samples")
         parser.print_help()
         return 1
-    
+
     sample_name = args.sample_name
     sample_file = sample_scripts_dir / f"{sample_name}.py"
-    
+
     # Check if sample file exists
     if not sample_file.exists():
         print(f"Error: Sample script not found: {sample_file}")
         print("Use --list to see available samples")
         return 1
-    
+
     print(f"=== Running {sample_name} with PyPromptGenerator Utilities ===")
     print(f"Working directory: {os.getcwd()}")
     print(f"Sample script: {sample_file}")
     print()
-    
+
     # Change to script directory to ensure relative paths work
     original_cwd = os.getcwd()
     os.chdir(script_dir)
-    
+
     try:
         # Read and execute the sample script
         with open(sample_file, 'r', encoding='utf-8') as f:
             sample_code = f.read()
-            
+
         # Execute the code with our globals (including utility functions)
         exec(sample_code, globals())
-        
+
         return 0
-        
+
     except Exception as e:
         print(f"Error executing {sample_name}: {e}")
         import traceback
         traceback.print_exc()
         return 1
-        
+
     finally:
         # Restore original working directory
         os.chdir(original_cwd)

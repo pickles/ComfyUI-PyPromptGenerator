@@ -18,7 +18,7 @@ class PyPromptBaseNode:
     """
     Base class for PyPrompt nodes with common functionality
     """
-    
+
     RETURN_TYPES = ("STRING", "STRING")
     RETURN_NAMES = ("positive_prompt", "negative_prompt")
     FUNCTION = "execute"
@@ -31,7 +31,7 @@ class PyPromptBaseNode:
         Returns: (global_vars, local_vars)
         """
         local_vars = {}
-        
+
         # Available built-in functions
         safe_builtins = {
             'len': len, 'str': str, 'int': int, 'float': float, 'bool': bool,
@@ -43,7 +43,7 @@ class PyPromptBaseNode:
             'globals': globals, 'locals': locals,  # For wildcard variable checking
             'print': print  # For debugging
         }
-        
+
         # Available modules
         import random
         import math
@@ -52,7 +52,7 @@ class PyPromptBaseNode:
         import json
         import time
         import os
-        
+
         # Handle utils module loading in ComfyUI environment
         try:
             from . import utils
@@ -73,7 +73,7 @@ class PyPromptBaseNode:
                     spec.loader.exec_module(utils_module)
                 else:
                     raise ImportError("Could not load utils module")
-        
+
         global_vars = {
             '__builtins__': safe_builtins,
             'random': random,
@@ -100,7 +100,7 @@ class PyPromptBaseNode:
             # WildcardManager class
             'WildcardManager': utils_module.WildcardManager,
         }
-        
+
         # Add safe import function
         def safe_import(name, *args, **kwargs):
             allowed_modules = {
@@ -115,9 +115,9 @@ class PyPromptBaseNode:
             if name in allowed_modules:
                 return allowed_modules[name]
             return None
-        
+
         global_vars['__import__'] = safe_import
-        
+
         # Automatically add wildcard variables to global variables
         try:
             # Use smart refresh that only refreshes when directory changes
@@ -127,7 +127,7 @@ class PyPromptBaseNode:
                 print(f"[{self._get_node_name()}] Loaded wildcard variables: {list(wildcard_vars.keys())}")
         except Exception as e:
             print(f"[{self._get_node_name()}] Warning: Could not load wildcards: {e}")
-        
+
         return global_vars, local_vars
 
     def _execute_script(self, script, node_name="PyPrompt", extra_info=""):
@@ -141,18 +141,18 @@ class PyPromptBaseNode:
             tuple: (positive_prompt, negative_prompt)
         """
         global_vars, local_vars = self._setup_execution_environment()
-        
+
         try:
             exec(script, global_vars, local_vars)
             positive = str(local_vars.get("positive_prompt", ""))
             negative = str(local_vars.get("negative_prompt", ""))
-            
+
             # Set default values if empty
             if not positive.strip():
                 positive = "beautiful, high quality"
             if not negative.strip():
                 negative = "low quality, worst quality"
-            
+
             # Always output to console
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             print(f"\n[{node_name}] Generated prompts:")
@@ -161,14 +161,14 @@ class PyPromptBaseNode:
             print(f"  Positive: {positive}")
             print(f"  Negative: {negative}")
             print(f"  Timestamp: {timestamp}")
-                
+
         except Exception as e:
             positive = f"Script Error: {str(e)}"
             negative = "error"
             print(f"[{node_name}] Error: {e}")
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             print(f"[{node_name}] Script execution failed at {timestamp}")
-        
+
         return (positive, negative)
 
     def _get_node_name(self):
@@ -180,7 +180,7 @@ class PyPromptGeneratorNode(PyPromptBaseNode):
     """
     ComfyUI custom node for generating prompts using Python scripts
     """
-    
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -191,7 +191,7 @@ class PyPromptGeneratorNode(PyPromptBaseNode):
                 }),
             }
         }
-    
+
     @classmethod
     def IS_CHANGED(cls, script):
         # Always refresh by returning a different value each time
@@ -209,7 +209,7 @@ class PyPromptFileGeneratorNode(PyPromptBaseNode):
     """
     ComfyUI custom node for generating prompts using Python scripts loaded from files
     """
-    
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -226,7 +226,7 @@ class PyPromptFileGeneratorNode(PyPromptBaseNode):
                 }),
             }
         }
-    
+
     @classmethod
     def IS_CHANGED(cls, script_file, base_path=""):
         # Always refresh by returning a different value each time
@@ -238,7 +238,7 @@ class PyPromptFileGeneratorNode(PyPromptBaseNode):
         Load and execute Python script from file and return positive/negative prompts
         """
         import os
-        
+
         # Determine the full file path
         if base_path and base_path.strip():
             full_path = os.path.join(base_path.strip(), script_file)
@@ -246,7 +246,7 @@ class PyPromptFileGeneratorNode(PyPromptBaseNode):
             # Use current directory if no base path specified
             current_dir = os.path.dirname(os.path.abspath(__file__))
             full_path = os.path.join(current_dir, script_file)
-        
+
         # Load script from file
         try:
             with open(full_path, 'r', encoding='utf-8') as f:
@@ -260,7 +260,7 @@ class PyPromptFileGeneratorNode(PyPromptBaseNode):
             error_msg = f"Error reading script file: {str(e)}"
             print(f"[PyPrompt File Generator] Error: {error_msg}")
             return (f"Error: {error_msg}", "file read error")
-        
+
         # Execute script using base class method
         return self._execute_script(script, "PyPrompt File Generator", f"File: {full_path}")
 
