@@ -20,7 +20,16 @@ SEED = None
 
 program = PromptProgram("CharacterPortrait")
 
-program.dimension(
+program.fixed(
+    [
+        "masterpiece, best quality, highly detailed",
+        "solo",
+    ]
+)
+
+woman = program.block("woman", "adult woman")
+
+woman.dimension(
     "hair",
     option("short_bob", "short bob haircut, glossy black hair"),
     option("long_wavy", "long wavy auburn hair"),
@@ -28,23 +37,21 @@ program.dimension(
     option("pixie", "textured pixie cut, platinum blonde hair", weight=0.7),
 )
 
-program.dimension(
+woman.dimension(
     "face",
     option("gentle", "gentle oval face, warm smile, soft features"),
     option("sharp", "defined facial features, confident expression"),
     option("freckled", "round face, light freckles, bright eyes"),
 )
 
-program.dimension(
+woman.dimension(
     "body",
     option("slender", "slender build"),
     option("athletic", "athletic build"),
     option("curvy", "curvy build"),
 )
 
-program.break_()
-
-program.dimension(
+woman.dimension(
     "outfit",
     option(
         "one_piece_swimsuit",
@@ -81,7 +88,7 @@ program.dimension(
     ),
 )
 
-program.dimension(
+woman.dimension(
     "pose",
     option("standing", "relaxed standing pose, looking at viewer"),
     option("walking", "natural walking pose"),
@@ -142,25 +149,23 @@ program.dimension(
 
 # CDK-like declarative constraints:
 # A beach scene always uses swimwear.
-program.when("location", tag="beach").require("outfit", tag="swimwear")
+program.when("location", tag="beach").require("woman.outfit", tag="swimwear")
 
 # Swimwear is only valid at the beach, and never in indoor locations.
-program.when("outfit", tag="swimwear").require("location", tag="beach")
-program.when("location", tag="indoor").forbid("outfit", tag="swimwear")
+program.when("woman.outfit", tag="swimwear").require("location", tag="beach")
+program.when("location", tag="indoor").forbid("woman.outfit", tag="swimwear")
 
 # Location-specific poses.
-program.when("pose", tag="shore").require("location", tag="beach")
-program.when("pose", tag="sofa").require("location", key="living_room")
+program.when("woman.pose", tag="shore").require("location", tag="beach")
+program.when("woman.pose", tag="sofa").require("location", key="living_room")
 
 # A sporty stretch should use activewear.
-program.when("pose", tag="sport").require("outfit", key="activewear")
+program.when("woman.pose", tag="sport").require("woman.outfit", key="activewear")
 
 
 scene = program.synth(seed=SEED)
 
-positive_prompt = scene.prompt(
-    "masterpiece, best quality, highly detailed, adult woman, solo"
-)
+positive_prompt = scene.prompt(prefix="")
 negative_prompt = scene.negative_prompt(
     "low quality, worst quality, blurry, bad anatomy, bad hands, "
     "extra fingers, missing fingers, deformed, text, watermark"
