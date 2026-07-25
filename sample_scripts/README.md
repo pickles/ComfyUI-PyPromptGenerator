@@ -81,6 +81,7 @@ option(
     "beachwear",
     weight=2.0,
     negative="winter coat, business suit",
+    break_before=True,
 )
 ```
 
@@ -93,6 +94,7 @@ option(
 | 第3引数以降 | 制約で利用する任意のtag |
 | `weight` | 選択される相対的な重み。初期値は`1.0` |
 | `negative` | このoptionが採用された場合に追加するNegative断片 |
+| `break_before` | このoptionが採用された場合、直前に`BREAK`行を挿入 |
 
 keyは特定の候補を指定するときに使います。tagは複数の候補をまとめて扱うときに使います。
 
@@ -152,6 +154,61 @@ program.dimension(
 ```
 
 各dimensionから必ず1つのoptionが選ばれます。
+
+### Dimensionの前にBREAKを入れる
+
+dimension定義の間に `break_()` を置くと、次のdimensionの直前に `BREAK` が入ります。
+
+```python
+program.dimension(
+    "body",
+    option("slender", "slender build"),
+    option("athletic", "athletic build"),
+)
+
+program.break_()
+
+program.dimension(
+    "outfit",
+    option("casual", "knit sweater and jeans"),
+    option("dress", "light summer dress"),
+)
+```
+
+メソッドを連結して書くこともできます。
+
+```python
+program.dimension(
+    "body",
+    option("athletic", "athletic build"),
+).break_().dimension(
+    "outfit",
+    option("activewear", "modern athletic wear"),
+)
+```
+
+`break_()` の後には必ずdimensionを定義してください。末尾に `break_()` を置いたまま `synth()` するとエラーになります。
+
+従来の `break_before=True` をdimensionに指定する方法も利用できます。
+
+```python
+program.dimension(
+    "outfit",
+    option("casual", "knit sweater and jeans"),
+    option("dress", "light summer dress"),
+    break_before=True,
+)
+```
+
+特定のoptionが選ばれた場合だけ `BREAK` を入れる場合:
+
+```python
+option(
+    "dramatic",
+    "dramatic cinematic lighting",
+    break_before=True,
+)
+```
 
 ## 制約
 
@@ -261,6 +318,20 @@ positive_prompt = scene.prompt(
 
 prefixの後ろに、dimensionの定義順で選択されたprompt文字列が追加されます。
 
+prefixと各Optionはそれぞれ別の行に出力されます。`break_before=True` が指定された箇所では、独立した `BREAK` 行が挿入されます。
+
+```text
+masterpiece, best quality, highly detailed, solo,
+short bob haircut,
+gentle oval face,
+slender build,
+BREAK
+light summer dress,
+natural walking pose,
+BREAK
+sunny beach, blue ocean
+```
+
 ### Negativeプロンプトを生成する
 
 ```python
@@ -269,7 +340,7 @@ negative_prompt = scene.negative_prompt(
 )
 ```
 
-基本Negativeの後ろに、採用されたoptionの `negative` がdimensionの定義順で追加されます。選ばれなかったoptionのNegativeは追加されません。
+基本Negativeの後ろに、採用されたoptionの `negative` がdimensionの定義順で1行ずつ追加されます。選ばれなかったoptionのNegativeは追加されません。
 
 ### 選択結果を確認する
 
@@ -307,34 +378,20 @@ print(scene.summary())
 
 `generate_random_image_prompt.py` をコピーして、dimensionと制約を変更するのが簡単です。
 
-PyPromptGeneratorNodeはスクリプトへ`__file__`を設定しないため、同一フォルダの`prompt_cdk.py`を読み込む場合は、実行例に含まれるbootstrap部分を残してください。
+PyPromptGeneratorNodeは、カスタムノード直下のフォルダを次の優先順位で自動的にimport検索パスへ追加します。
+
+1. `scripts/`
+2. `sample_scripts/`
+
+そのため、同じフォルダの `prompt_cdk.py` を通常のimport文で読み込めます。
 
 ```python
-import importlib
-import sys
-from pathlib import Path
-
-try:
-    script_dir = Path(__file__).resolve().parent
-except NameError:
-    from pyprompt_generator import nodes
-
-    script_dir = Path(nodes.__file__).resolve().parents[2] / "sample_scripts"
-
-sys.path.insert(0, str(script_dir))
-try:
-    if "prompt_cdk" in sys.modules:
-        prompt_cdk = importlib.reload(sys.modules["prompt_cdk"])
-    else:
-        import prompt_cdk
-finally:
-    sys.path.pop(0)
-
-PromptProgram = prompt_cdk.PromptProgram
-option = prompt_cdk.option
+from prompt_cdk import PromptProgram, option
 ```
 
-この処理は、`prompt_cdk.py` を編集した後もComfyUIを再起動せず、File Generatorの次回実行時に最新版をreloadします。
+`scripts/` と `sample_scripts/` に同名のモジュールがある場合は、個人用の `scripts/` が優先されます。
+
+`prompt_cdk.py` の編集をComfyUIの再起動なしで反映したい場合は、実行例のように `importlib.reload()` を使用してください。
 
 ## エラー
 

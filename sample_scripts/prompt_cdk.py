@@ -13,16 +13,24 @@ class Option:
     tags: frozenset[str]
     weight: float = 1.0
     negative: str = ""
+    break_before: bool = False
 
     def has_tag(self, tag):
         return tag in self.tags
 
 
-def option(key, prompt, *tags, weight=1.0, negative=""):
+def option(key, prompt, *tags, weight=1.0, negative="", break_before=False):
     """Create one selectable prompt fragment."""
     if weight <= 0:
         raise ValueError("Option weight must be greater than zero")
-    return Option(key, prompt, frozenset(tags), float(weight), negative)
+    return Option(
+        key,
+        prompt,
+        frozenset(tags),
+        float(weight),
+        negative,
+        bool(break_before),
+    )
 
 
 @dataclass(frozen=True)
@@ -68,24 +76,53 @@ class Rule:
 @dataclass(frozen=True)
 class Scene:
     selection: dict[str, Option]
+    break_before_dimensions: frozenset[str]
 
     def prompt(self, prefix="masterpiece, best quality, solo"):
-        fragments = [prefix]
-        fragments.extend(selected.prompt for selected in self.selection.values())
-        return ", ".join(fragment for fragment in fragments if fragment)
+        lines = []
+        if prefix:
+            lines.append(prefix)
+
+        for dimension, selected in self.selection.items():
+            if (
+                dimension in self.break_before_dimensions
+                or selected.break_before
+            ) and lines:
+                lines.append("BREAK")
+            if selected.prompt:
+                lines.append(selected.prompt)
+
+        return self._render_lines(lines)
 
     def summary(self):
         return {name: selected.key for name, selected in self.selection.items()}
 
     def negative_prompt(self, base=""):
         """Combine the base negative prompt with selected option negatives."""
-        fragments = [base]
-        fragments.extend(
+        lines = [base]
+        lines.extend(
             selected.negative
             for selected in self.selection.values()
             if selected.negative
         )
-        return ", ".join(fragment for fragment in fragments if fragment)
+        return self._render_lines([line for line in lines if line])
+
+    @staticmethod
+    def _render_lines(lines):
+        """Render prompt fragments one per line, preserving standalone BREAK."""
+        last_text_index = max(
+            (index for index, line in enumerate(lines) if line != "BREAK"),
+            default=-1,
+        )
+        rendered = []
+        for index, line in enumerate(lines):
+            if line == "BREAK":
+                rendered.append(line)
+            elif index == last_text_index:
+                rendered.append(line)
+            else:
+                rendered.append(f"{line},")
+        return "\n".join(rendered)
 
 
 class ConstraintBuilder:
@@ -112,20 +149,33 @@ class PromptProgram:
     def __init__(self, name):
         self.name = name
         self.dimensions = {}
+        self.break_before_dimensions = set()
+        self._break_before_next_dimension = False
         self.rules = []
 
-    def dimension(self, name, *options):
+    def dimension(self, name, *options, break_before=False):
         if name in self.dimensions:
             raise ValueError(f"Dimension already exists: {name}")
         if not options:
             raise ValueError(f"Dimension must contain at least one option: {name}")
         self.dimensions[name] = tuple(options)
+        if break_before or self._break_before_next_dimension:
+            self.break_before_dimensions.add(name)
+        self._break_before_next_dimension = False
+        return self
+
+    def break_(self):
+        """Insert BREAK immediately before the next dimension."""
+        self._break_before_next_dimension = True
         return self
 
     def when(self, dimension, *, key=None, tag=None):
         return ConstraintBuilder(self, self._condition(dimension, key, tag))
 
     def synth(self, seed=None):
+        if self._break_before_next_dimension:
+            raise ValueError("break_() must be followed by a dimension")
+
         names = tuple(self.dimensions)
         candidates = []
         weights = []
@@ -141,7 +191,7 @@ class PromptProgram:
             raise ValueError(f"No valid prompt combinations for {self.name}:\n{rules}")
 
         selected = Random(seed).choices(candidates, weights=weights, k=1)[0]
-        return Scene(selected)
+        return Scene(selected, frozenset(self.break_before_dimensions))
 
     def _condition(self, dimension, key, tag):
         if dimension not in self.dimensions:

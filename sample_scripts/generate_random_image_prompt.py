@@ -2,26 +2,14 @@
 
 import importlib
 import sys
-from pathlib import Path
 
 
-# PyPromptGeneratorNode executes source text without setting __file__. Locate
-# this custom node's sample_scripts directory in direct and node execution modes.
-try:
-    script_dir = Path(__file__).resolve().parent
-except NameError:
-    from pyprompt_generator import nodes
-
-    script_dir = Path(nodes.__file__).resolve().parents[2] / "sample_scripts"
-
-sys.path.insert(0, str(script_dir))
-try:
-    if "prompt_cdk" in sys.modules:
-        prompt_cdk = importlib.reload(sys.modules["prompt_cdk"])
-    else:
-        import prompt_cdk
-finally:
-    sys.path.pop(0)
+# PyPromptGeneratorNode adds scripts/ and sample_scripts/ to sys.path.
+# Reload the helper so edits take effect without restarting ComfyUI.
+if "prompt_cdk" in sys.modules:
+    prompt_cdk = importlib.reload(sys.modules["prompt_cdk"])
+else:
+    import prompt_cdk
 
 PromptProgram = prompt_cdk.PromptProgram
 option = prompt_cdk.option
@@ -53,6 +41,8 @@ program.dimension(
     option("athletic", "athletic build"),
     option("curvy", "curvy build"),
 )
+
+program.break_()
 
 program.dimension(
     "outfit",
@@ -109,6 +99,8 @@ program.dimension(
     ),
     option("stretch", "light stretching pose", "sport"),
 )
+
+program.break_()
 
 program.dimension(
     "location",
