@@ -195,6 +195,37 @@ option(
 
 keyは特定の候補を指定するときに使います。tagは複数の候補をまとめて扱うときに使います。
 
+### Optionに複数のプロンプト断片を指定する
+
+第2引数には、`fixed()` と同様に文字列または文字列の配列を指定できます。
+配列を渡したOptionが採用されると、すべての要素が定義順に1項目ずつ改行して出力されます。
+
+```python
+from random import choice
+
+program.dimension(
+    "woman",
+    option(
+        "casual_woman",
+        [
+            "adult woman",
+            choice(["short bob haircut", "long wavy hair"]),
+            choice(["slender build", "athletic build"]),
+        ],
+        "woman",
+        "casual",
+    ),
+)
+```
+
+この例ではスクリプト実行時に髪型と体型がそれぞれ選ばれ、`casual_woman` が採用された場合にまとめてプロンプトへ追加されます。
+
+```text
+adult woman,
+short bob haircut,
+athletic build
+```
+
 ### 採用時にNegativeを追加する
 
 `negative` を指定すると、そのoptionが選ばれた場合だけNegativeプロンプトへ追加されます。
@@ -330,6 +361,79 @@ program.when("pose", tag="sofa").require(
     key="living_room",
 )
 ```
+
+### 複数key
+
+`when()`、`require()`、`forbid()` は、単一の `key` に加えて複数の `keys` を指定できます。
+
+Optionはkeyを1つだけ持つため、`keys` は指定したkeyのいずれかに一致するOR条件です。
+
+```python
+program.when(
+    "location",
+    keys=["living_room", "cafe", "studio"],
+).forbid(
+    "woman.outfit",
+    keys=["one_piece_swimsuit", "rash_guard"],
+)
+```
+
+| 指定 | 意味 |
+|---|---|
+| `key="beach"` | 単一keyに一致 |
+| `keys=["beach", "pool"]` | 指定したkeyのいずれかに一致 |
+
+`key` と `keys` を同時に指定することはできません。
+
+key条件とtag条件を同時に指定した場合は、両方を満たすOptionだけが一致します。
+
+```python
+program.when(
+    "location",
+    keys=["beach", "pool"],
+    tag="outdoor",
+)
+```
+
+### 複数タグ
+
+`when()`、`require()`、`forbid()` は、単一の `tag` に加えて複数の `tags` を指定できます。
+
+すべてのタグを持つ場合に一致させるには `match="all"` を使用します。
+
+```python
+program.when(
+    "location",
+    tags=["beach", "outdoor"],
+    match="all",
+).require(
+    "woman.outfit",
+    tags=["swimwear", "beachwear"],
+    match="all",
+)
+```
+
+いずれかのタグを持つ場合に一致させるには `match="any"` を使用します。
+
+```python
+program.when(
+    "location",
+    tags=["home", "cafe", "studio"],
+    match="any",
+).forbid(
+    "woman.outfit",
+    tag="swimwear",
+)
+```
+
+| 指定 | 意味 |
+|---|---|
+| `tag="beach"` | 単一タグに一致 |
+| `tags=["beach", "outdoor"]` | 複数タグを指定 |
+| `match="all"` | 指定したすべてのタグを持つ場合に一致。初期値 |
+| `match="any"` | 指定したタグを1つ以上持つ場合に一致 |
+
+`tag` と `tags` を同時に指定することはできません。
 
 ### forbid
 

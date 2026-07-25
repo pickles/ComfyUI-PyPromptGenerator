@@ -148,12 +148,24 @@ program.dimension(
 
 
 # CDK-like declarative constraints:
-# A beach scene always uses swimwear.
-program.when("location", tag="beach").require("woman.outfit", tag="swimwear")
+# A beach scene always uses beach-appropriate swimwear.
+program.when(
+    "location",
+    tags=["beach", "outdoor"],
+    match="all",
+).require(
+    "woman.outfit",
+    tags=["swimwear", "beachwear"],
+    match="all",
+)
 
 # Swimwear is only valid at the beach, and never in indoor locations.
 program.when("woman.outfit", tag="swimwear").require("location", tag="beach")
-program.when("location", tag="indoor").forbid("woman.outfit", tag="swimwear")
+program.when(
+    "location",
+    tags=["indoor", "home"],
+    match="any",
+).forbid("woman.outfit", tag="swimwear")
 
 # Location-specific poses.
 program.when("woman.pose", tag="shore").require("location", tag="beach")
