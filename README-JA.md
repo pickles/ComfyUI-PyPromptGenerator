@@ -99,7 +99,8 @@ BREAK
 
 1. `sample_scripts/`ディレクトリに新しいPythonファイルを作成
 2. インポートなしでPyPromptGeneratorの全ユーティリティ関数を使用
-3. スクリプトを実行：`python run_sample.py your_script_name`
+3. `scripts/`または`sample_scripts/`内のモジュールを通常の`import`文で再利用
+4. スクリプトを実行：`python run_sample.py your_script_name`
 
 ## 機能
 
@@ -111,6 +112,7 @@ BREAK
 ### 📁 **PyPromptFileGeneratorノード**
 - **外部スクリプトファイル**: ファイルからPythonスクリプトを読み込んで実行
 - **ホットリロード**: ファイル変更を自動検出してスクリプトをリロード
+- **暗黙的なimportパス**: `scripts/`と`sample_scripts/`のモジュールをパス設定なしでimport
 - **整理されたワークフロー**: 複雑なプロンプトロジックを別の再利用可能ファイルに保持
 - **バージョン管理**: プロジェクト内でプロンプトスクリプトを追跡・管理
 

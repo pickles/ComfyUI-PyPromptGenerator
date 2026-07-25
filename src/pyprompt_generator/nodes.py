@@ -6,6 +6,8 @@ positive and negative prompts using Python scripts.
 """
 
 import builtins
+import os
+import sys
 from datetime import datetime
 
 # Support for relative imports in ComfyUI environment
@@ -26,6 +28,22 @@ class PyPromptBaseNode:
     CATEGORY = "utils"
     OUTPUT_NODE = False
 
+    @staticmethod
+    def _add_script_import_paths():
+        """Add user and bundled script directories to Python's import path."""
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        custom_node_root = os.path.dirname(os.path.dirname(current_dir))
+        import_paths = [
+            os.path.join(custom_node_root, "scripts"),
+            os.path.join(custom_node_root, "sample_scripts"),
+        ]
+
+        # Insert in reverse so scripts/ has priority over sample_scripts/.
+        for import_path in reversed(import_paths):
+            if import_path in sys.path:
+                sys.path.remove(import_path)
+            sys.path.insert(0, import_path)
+
     def _setup_execution_environment(self):
         """
         Set up an unrestricted Python execution environment with utility functions.
@@ -37,6 +55,7 @@ class PyPromptBaseNode:
         Returns: (global_vars, local_vars)
         """
         local_vars = {}
+        self._add_script_import_paths()
 
         # Common modules are preloaded for convenience. Scripts may import any
         # other installed module through the standard Python import mechanism.
@@ -46,8 +65,6 @@ class PyPromptBaseNode:
         import re
         import json
         import time
-        import os
-
         # Handle utils module loading in ComfyUI environment
         try:
             from . import utils
@@ -59,7 +76,6 @@ class PyPromptBaseNode:
             except ImportError:
                 # Last resort: load directly from current directory
                 import importlib.util
-                import os
                 current_dir = os.path.dirname(os.path.abspath(__file__))
                 utils_path = os.path.join(current_dir, 'utils.py')
                 spec = importlib.util.spec_from_file_location("utils", utils_path)

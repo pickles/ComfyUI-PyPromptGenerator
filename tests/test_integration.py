@@ -4,6 +4,8 @@ Integration tests for the PyPromptGeneratorNode
 
 import pytest
 import json
+import os
+import sys
 from unittest.mock import patch
 
 
@@ -42,6 +44,38 @@ negative_prompt = str(sum(range(4)))
 
         assert positive == "full/python: 4"
         assert negative == "6"
+
+    def test_script_directories_are_implicit_import_paths(self, prompt_generator_node):
+        """Test scripts and sample_scripts are added with user scripts first"""
+        prompt_generator_node._setup_execution_environment()
+
+        from src.pyprompt_generator import nodes
+
+        custom_node_root = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(nodes.__file__)))
+        )
+        expected_paths = [
+            os.path.join(custom_node_root, "scripts"),
+            os.path.join(custom_node_root, "sample_scripts"),
+        ]
+
+        assert sys.path[:2] == expected_paths
+
+    def test_can_implicitly_import_sample_script_module(self, prompt_generator_node):
+        """Test a module can be imported without modifying sys.path in the script"""
+        sys.modules.pop("prompt_cdk", None)
+        script = """
+import prompt_cdk
+from pathlib import Path
+
+positive_prompt = Path(prompt_cdk.__file__).parent.name
+negative_prompt = prompt_cdk.PromptProgram.__name__
+"""
+
+        positive, negative = prompt_generator_node.execute(script=script)
+
+        assert positive in {"scripts", "sample_scripts"}
+        assert negative == "PromptProgram"
 
     def test_choice_function_integration(self, prompt_generator_node, sample_scripts):
         """Test that choice function works within node execution"""

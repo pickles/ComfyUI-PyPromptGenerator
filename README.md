@@ -99,7 +99,8 @@ The `run_sample.py` wrapper allows you to create and run your own prompt generat
 
 1. Create a new Python file in the `sample_scripts/` directory
 2. Use all PyPromptGenerator utility functions without imports
-3. Run your script: `python run_sample.py your_script_name`
+3. Reuse modules from `scripts/` or `sample_scripts/` with normal imports
+4. Run your script: `python run_sample.py your_script_name`
 
 ## Features
 
@@ -112,6 +113,7 @@ The `run_sample.py` wrapper allows you to create and run your own prompt generat
 ### 📁 **PyPromptFileGenerator Node**
 - **External Script Files**: Load and execute Python scripts from files
 - **Hot Reload**: Automatically detects file changes and reloads scripts
+- **Implicit Import Paths**: Import modules from `scripts/` and `sample_scripts/` without path setup
 - **Organized Workflows**: Keep complex prompt logic in separate, reusable files
 - **Version Control**: Track and manage prompt scripts in your project
 
