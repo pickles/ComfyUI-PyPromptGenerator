@@ -1,6 +1,6 @@
 from random import choice
 
-from sample_scripts.prompt_cdk import PromptProgram, option
+from sample_scripts.prompt_cdk import PromptProgram, dimension, option
 
 
 def test_prompt_renders_each_option_on_its_own_line():
@@ -392,3 +392,163 @@ def test_key_and_keys_cannot_be_used_together():
         assert str(error) == "Use either key or keys, not both"
     else:
         raise AssertionError("Using key and keys together should fail")
+
+
+def test_block_can_add_conditional_dimension_from_program_dimension():
+    program = PromptProgram("ConditionalBlocks")
+    program.dimension(
+        "situation",
+        option("beach", "sunny beach"),
+        option("living", "cozy living room"),
+    )
+
+    girl = program.block("girl", "girl")
+    girl.dimension("face", option("smile", "smiling face"))
+    girl.when("program.situation", key="beach").dimension(
+        "action",
+        option("beach_bed", "sitting on a beach bed"),
+    )
+    girl.when("program.situation", key="living").dimension(
+        "action",
+        option("sofa", "sitting on a sofa"),
+    )
+    program.when("situation", key="living").dimension(
+        "room",
+        option("coffee", "coffee cup on the table"),
+    )
+
+    scenes = [program.synth(seed=seed) for seed in range(20)]
+    beach = next(
+        scene
+        for scene in scenes
+        if scene.selection["situation"].key == "beach"
+    )
+    living = next(
+        scene
+        for scene in scenes
+        if scene.selection["situation"].key == "living"
+    )
+
+    assert beach.prompt(prefix="") == (
+        "sunny beach,\n"
+        "girl,\n"
+        "smiling face,\n"
+        "sitting on a beach bed"
+    )
+    assert beach.summary() == {
+        "situation": "beach",
+        "girl.face": "smile",
+        "girl.action": "beach_bed",
+    }
+    assert living.prompt(prefix="") == (
+        "cozy living room,\n"
+        "girl,\n"
+        "smiling face,\n"
+        "sitting on a sofa,\n"
+        "coffee cup on the table"
+    )
+    assert living.summary() == {
+        "situation": "living",
+        "girl.face": "smile",
+        "girl.action": "sofa",
+        "room": "coffee",
+    }
+
+
+def test_conditional_dimension_is_absent_when_no_branch_matches():
+    program = PromptProgram("InactiveConditional")
+    program.dimension("situation", option("studio", "photo studio"))
+    girl = program.block("girl", "girl")
+    girl.when("program.situation", key="beach").dimension(
+        "action",
+        option("beach_bed", "sitting on a beach bed"),
+    )
+
+    scene = program.synth(seed=1)
+
+    assert scene.prompt(prefix="") == "photo studio,\ngirl"
+    assert "girl.action" not in scene.selection
+    assert "girl.action" not in scene.summary()
+
+
+def test_overlapping_conditional_dimension_branches_are_rejected():
+    program = PromptProgram("OverlappingConditional")
+    program.dimension("situation", option("beach", "sunny beach", "outdoor"))
+    girl = program.block("girl", "girl")
+    girl.when("program.situation", key="beach").dimension(
+        "action",
+        option("sitting", "sitting pose"),
+    )
+    girl.when("program.situation", tag="outdoor").dimension(
+        "action",
+        option("walking", "walking pose"),
+    )
+
+    try:
+        program.synth(seed=1)
+    except ValueError as error:
+        assert str(error) == (
+            "Multiple conditional branches matched dimension: girl.action"
+        )
+    else:
+        raise AssertionError("Overlapping conditional branches should fail")
+
+
+def test_reusable_dimension_can_be_used_by_multiple_blocks():
+    hair_length = dimension(
+        "hair_length",
+        option("short", "short hair"),
+        option("long", "long hair"),
+    )
+
+    program = PromptProgram("ReusableDimension")
+    girl = program.block("girl", "girl")
+    girl.dimension(hair_length)
+    man = program.block("man", "man")
+    man.dimension(hair_length)
+
+    scene = program.synth(seed=1)
+
+    assert set(scene.summary()) == {"girl.hair_length", "man.hair_length"}
+    assert scene.selection["girl.hair_length"] in hair_length.options
+    assert scene.selection["man.hair_length"] in hair_length.options
+
+
+def test_reusable_dimension_can_be_used_conditionally():
+    actions = dimension(
+        "action",
+        option("sitting", "sitting pose"),
+        option("walking", "walking pose"),
+    )
+    program = PromptProgram("ReusableConditional")
+    program.dimension("situation", option("beach", "sunny beach"))
+    girl = program.block("girl", "girl")
+    girl.when("program.situation", key="beach").dimension(actions)
+
+    scene = program.synth(seed=1)
+
+    assert scene.summary()["girl.action"] in {"sitting", "walking"}
+
+
+def test_program_namespace_works_for_block_rule_targets():
+    program = PromptProgram("ProgramNamespaceTargets")
+    program.dimension(
+        "situation",
+        option("beach", "sunny beach"),
+        option("living", "cozy living room"),
+    )
+    girl = program.block("girl", "girl")
+    girl.dimension(
+        "pose",
+        option("sofa", "sitting on a sofa"),
+        option("shore", "walking by the shore"),
+    )
+    girl.when("pose", key="sofa").require(
+        "program.situation",
+        key="living",
+    )
+
+    for seed in range(20):
+        scene = program.synth(seed=seed)
+        if scene.selection["girl.pose"].key == "sofa":
+            assert scene.selection["situation"].key == "living"

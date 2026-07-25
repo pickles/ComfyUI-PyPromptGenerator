@@ -1,8 +1,6 @@
 """Small CDK-like framework for constrained random prompt generation."""
 
 from dataclasses import dataclass
-from itertools import product
-from math import prod
 from random import Random
 
 
@@ -35,6 +33,21 @@ def option(key, prompt, *tags, weight=1.0, negative="", break_before=False):
 
 
 @dataclass(frozen=True)
+class Dimension:
+    """Reusable dimension definition."""
+
+    name: str
+    options: tuple[Option, ...]
+    break_before: bool = False
+
+
+def dimension(name, *options, break_before=False):
+    """Create a dimension definition that can be reused across programs."""
+    _validate_dimension(name, options)
+    return Dimension(name, tuple(options), bool(break_before))
+
+
+@dataclass(frozen=True)
 class Condition:
     dimension: str
     keys: frozenset[str] = frozenset()
@@ -42,7 +55,9 @@ class Condition:
     match: str = "all"
 
     def matches(self, selection):
-        selected = selection[self.dimension]
+        selected = selection.get(self.dimension)
+        if selected is None:
+            return False
         if self.keys and selected.key not in self.keys:
             return False
         if self.tags:
@@ -80,6 +95,12 @@ class Rule:
 
 
 @dataclass(frozen=True)
+class ConditionalBranch:
+    trigger: Condition
+    options: tuple[Option, ...]
+
+
+@dataclass(frozen=True)
 class Scene:
     selection: dict[str, Option]
     elements: tuple[tuple[str, str | None], ...]
@@ -95,7 +116,9 @@ class Scene:
             elif element_type == "fixed":
                 lines.append(value)
             elif element_type == "dimension":
-                selected = self.selection[value]
+                selected = self.selection.get(value)
+                if selected is None:
+                    continue
                 if selected.break_before and lines and lines[-1] != "BREAK":
                     lines.append("BREAK")
                 if selected.prompt:
@@ -198,6 +221,18 @@ class ConstraintBuilder:
         )
         return self.return_target
 
+    def dimension(self, name, *options):
+        """Add options used only while this builder's condition matches."""
+        name, options, break_before = _dimension_arguments(name, options)
+        name = self.resolve_dimension(name)
+        self.program._add_conditional_dimension(
+            name,
+            options,
+            self.trigger,
+            break_before=break_before,
+        )
+        return self.return_target
+
 
 class PromptBlock:
     """Group fixed fragments and dimensions so related tokens stay together."""
@@ -211,10 +246,11 @@ class PromptBlock:
         return self
 
     def dimension(self, name, *options, break_before=False):
+        name, options, template_break = _dimension_arguments(name, options)
         self.program._add_dimension(
             self._scope(name),
             options,
-            break_before=break_before,
+            break_before=break_before or template_break,
         )
         return self
 
@@ -248,6 +284,8 @@ class PromptBlock:
         )
 
     def _scope(self, dimension):
+        if dimension.startswith("program."):
+            return dimension.removeprefix("program.")
         if "." in dimension:
             return dimension
         return f"{self.name}.{dimension}"
@@ -259,12 +297,18 @@ class PromptProgram:
     def __init__(self, name):
         self.name = name
         self.dimensions = {}
+        self.conditional_dimensions = {}
         self.elements = []
         self.block_names = set()
         self.rules = []
 
     def dimension(self, name, *options, break_before=False):
-        self._add_dimension(name, options, break_before=break_before)
+        name, options, template_break = _dimension_arguments(name, options)
+        self._add_dimension(
+            name,
+            options,
+            break_before=break_before or template_break,
+        )
         return self
 
     def fixed(self, value):
@@ -301,22 +345,37 @@ class PromptProgram:
     ):
         return ConstraintBuilder(
             self,
-            self._condition(dimension, key, keys, tag, tags, match),
+            self._condition(
+                self._program_scope(dimension),
+                key,
+                keys,
+                tag,
+                tags,
+                match,
+            ),
+            resolve_dimension=self._program_scope,
         )
 
     def synth(self, seed=None):
         if self.elements and self.elements[-1][0] == "break":
             raise ValueError("break_() must be followed by prompt content")
 
-        names = tuple(self.dimensions)
-        candidates = []
-        weights = []
+        states = [({}, 1.0)]
+        for element_type, name in self.elements:
+            if element_type != "dimension":
+                continue
+            if name in self.dimensions:
+                states = self._expand_states(states, self.dimensions[name], name)
+            else:
+                states = self._expand_conditional_states(states, name)
 
-        for values in product(*(self.dimensions[name] for name in names)):
-            selection = dict(zip(names, values))
-            if all(rule.accepts(selection) for rule in self.rules):
-                candidates.append(selection)
-                weights.append(prod(value.weight for value in values))
+        valid_states = [
+            (selection, weight)
+            for selection, weight in states
+            if all(rule.accepts(selection) for rule in self.rules)
+        ]
+        candidates = [selection for selection, _weight in valid_states]
+        weights = [weight for _selection, weight in valid_states]
 
         if not candidates:
             rules = "\n".join(f"- {rule.describe()}" for rule in self.rules)
@@ -326,14 +385,70 @@ class PromptProgram:
         return Scene(selected, tuple(self.elements))
 
     def _add_dimension(self, name, options, *, break_before=False):
-        if name in self.dimensions:
+        if name in self.dimensions or name in self.conditional_dimensions:
             raise ValueError(f"Dimension already exists: {name}")
-        if not options:
-            raise ValueError(f"Dimension must contain at least one option: {name}")
+        _validate_dimension(name, options)
         if break_before:
             self._add_break()
         self.dimensions[name] = tuple(options)
         self.elements.append(("dimension", name))
+
+    def _add_conditional_dimension(
+        self,
+        name,
+        options,
+        trigger,
+        *,
+        break_before=False,
+    ):
+        if name in self.dimensions:
+            raise ValueError(f"Dimension already exists: {name}")
+        _validate_dimension(name, options)
+        if name not in self.conditional_dimensions:
+            if break_before:
+                raise ValueError(
+                    "Conditional dimensions use option(break_before=True)"
+                )
+            self.conditional_dimensions[name] = []
+            self.elements.append(("dimension", name))
+        self.conditional_dimensions[name].append(
+            ConditionalBranch(trigger, tuple(options))
+        )
+
+    @staticmethod
+    def _expand_states(states, options, name):
+        return [
+            (
+                {**selection, name: selected},
+                weight * selected.weight,
+            )
+            for selection, weight in states
+            for selected in options
+        ]
+
+    def _expand_conditional_states(self, states, name):
+        expanded = []
+        for selection, weight in states:
+            matching = [
+                branch
+                for branch in self.conditional_dimensions[name]
+                if branch.trigger.matches(selection)
+            ]
+            if len(matching) > 1:
+                raise ValueError(
+                    f"Multiple conditional branches matched dimension: {name}"
+                )
+            if not matching:
+                expanded.append((selection, weight))
+                continue
+            expanded.extend(
+                self._expand_states(
+                    [(selection, weight)],
+                    matching[0].options,
+                    name,
+                )
+            )
+        return expanded
 
     def _add_fixed(self, value):
         normalized = _normalize_fragments(value, "fixed")
@@ -346,7 +461,10 @@ class PromptProgram:
         self.elements.append(("break", None))
 
     def _condition(self, dimension, key, keys, tag, tags, match):
-        if dimension not in self.dimensions:
+        if (
+            dimension not in self.dimensions
+            and dimension not in self.conditional_dimensions
+        ):
             raise KeyError(f"Unknown dimension: {dimension}")
         if key is not None and keys is not None:
             raise ValueError("Use either key or keys, not both")
@@ -390,6 +508,29 @@ class PromptProgram:
 
     def _add_rule(self, rule):
         self.rules.append(rule)
+
+    @staticmethod
+    def _program_scope(dimension):
+        return dimension.removeprefix("program.")
+
+
+def _dimension_arguments(name, options):
+    if not isinstance(name, Dimension):
+        return name, options, False
+    if options:
+        raise TypeError(
+            "A reusable Dimension cannot be combined with additional options"
+        )
+    return name.name, name.options, name.break_before
+
+
+def _validate_dimension(name, options):
+    if not isinstance(name, str):
+        raise TypeError("Dimension name must be a string")
+    if not options:
+        raise ValueError(f"Dimension must contain at least one option: {name}")
+    if any(not isinstance(value, Option) for value in options):
+        raise TypeError("Dimension options must be created with option()")
 
 
 def _normalize_fragments(value, function_name):
