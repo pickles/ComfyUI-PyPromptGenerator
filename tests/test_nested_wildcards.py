@@ -258,6 +258,18 @@ excited
         has_color_in_item = any(color in color_item_combo for color in ["red", "blue", "green"])
         assert has_color_in_item
 
+    def test_nested_expansion_is_independent_of_dictionary_order(self):
+        """Test that multiple nesting levels resolve when dependents come first"""
+        test_wildcards = {
+            "_prompts": ["{descriptions}, masterpiece"],
+            "_descriptions": ["{adjectives} dragon"],
+            "_adjectives": ["majestic"],
+        }
+
+        _expand_nested_wildcards(test_wildcards)
+
+        assert test_wildcards["_prompts"] == ["majestic dragon, masterpiece"]
+
     def test_complex_nested_scenario(self):
         """Test a complex scenario with multiple levels and cross-references"""
         with tempfile.TemporaryDirectory() as temp_dir:
