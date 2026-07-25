@@ -76,21 +76,24 @@ class Rule:
 @dataclass(frozen=True)
 class Scene:
     selection: dict[str, Option]
-    break_before_dimensions: frozenset[str]
+    elements: tuple[tuple[str, str | None], ...]
 
     def prompt(self, prefix="masterpiece, best quality, solo"):
         lines = []
         if prefix:
             lines.append(prefix)
 
-        for dimension, selected in self.selection.items():
-            if (
-                dimension in self.break_before_dimensions
-                or selected.break_before
-            ) and lines:
+        for element_type, value in self.elements:
+            if element_type == "break":
                 lines.append("BREAK")
-            if selected.prompt:
-                lines.append(selected.prompt)
+            elif element_type == "fixed":
+                lines.append(value)
+            elif element_type == "dimension":
+                selected = self.selection[value]
+                if selected.break_before and lines and lines[-1] != "BREAK":
+                    lines.append("BREAK")
+                if selected.prompt:
+                    lines.append(selected.prompt)
 
         return self._render_lines(lines)
 
@@ -126,21 +129,63 @@ class Scene:
 
 
 class ConstraintBuilder:
-    def __init__(self, program, trigger):
+    def __init__(self, program, trigger, resolve_dimension=None, return_target=None):
         self.program = program
         self.trigger = trigger
+        self.resolve_dimension = resolve_dimension or (lambda dimension: dimension)
+        self.return_target = return_target or program
 
     def require(self, dimension, *, key=None, tag=None):
+        dimension = self.resolve_dimension(dimension)
         self.program._add_rule(
             Rule(self.trigger, self.program._condition(dimension, key, tag), "require")
         )
-        return self.program
+        return self.return_target
 
     def forbid(self, dimension, *, key=None, tag=None):
+        dimension = self.resolve_dimension(dimension)
         self.program._add_rule(
             Rule(self.trigger, self.program._condition(dimension, key, tag), "forbid")
         )
-        return self.program
+        return self.return_target
+
+
+class PromptBlock:
+    """Group fixed fragments and dimensions so related tokens stay together."""
+
+    def __init__(self, program, name):
+        self.program = program
+        self.name = name
+
+    def fixed(self, value):
+        self.program._add_fixed(value)
+        return self
+
+    def dimension(self, name, *options, break_before=False):
+        self.program._add_dimension(
+            self._scope(name),
+            options,
+            break_before=break_before,
+        )
+        return self
+
+    def break_(self):
+        self.program._add_break()
+        return self
+
+    def when(self, dimension, *, key=None, tag=None):
+        trigger = self.program._condition(self._scope(dimension), key, tag)
+        return ConstraintBuilder(
+            self.program,
+            trigger,
+            resolve_dimension=self._scope,
+            return_target=self,
+        )
+
+    def _scope(self, dimension):
+        if "." in dimension:
+            return dimension
+        return f"{self.name}.{dimension}"
 
 
 class PromptProgram:
@@ -149,32 +194,42 @@ class PromptProgram:
     def __init__(self, name):
         self.name = name
         self.dimensions = {}
-        self.break_before_dimensions = set()
-        self._break_before_next_dimension = False
+        self.elements = []
+        self.block_names = set()
         self.rules = []
 
     def dimension(self, name, *options, break_before=False):
-        if name in self.dimensions:
-            raise ValueError(f"Dimension already exists: {name}")
-        if not options:
-            raise ValueError(f"Dimension must contain at least one option: {name}")
-        self.dimensions[name] = tuple(options)
-        if break_before or self._break_before_next_dimension:
-            self.break_before_dimensions.add(name)
-        self._break_before_next_dimension = False
+        self._add_dimension(name, options, break_before=break_before)
         return self
 
+    def fixed(self, value):
+        """Add one fixed string or a list of fixed strings."""
+        self._add_fixed(value)
+        return self
+
+    def block(self, name, value=None, *, break_before=False):
+        """Create a named block whose dimensions use scoped names."""
+        if name in self.block_names:
+            raise ValueError(f"Block already exists: {name}")
+        self.block_names.add(name)
+        if break_before:
+            self._add_break()
+        block = PromptBlock(self, name)
+        if value is not None:
+            block.fixed(value)
+        return block
+
     def break_(self):
-        """Insert BREAK immediately before the next dimension."""
-        self._break_before_next_dimension = True
+        """Insert BREAK at the current position in the prompt."""
+        self._add_break()
         return self
 
     def when(self, dimension, *, key=None, tag=None):
         return ConstraintBuilder(self, self._condition(dimension, key, tag))
 
     def synth(self, seed=None):
-        if self._break_before_next_dimension:
-            raise ValueError("break_() must be followed by a dimension")
+        if self.elements and self.elements[-1][0] == "break":
+            raise ValueError("break_() must be followed by prompt content")
 
         names = tuple(self.dimensions)
         candidates = []
@@ -191,7 +246,34 @@ class PromptProgram:
             raise ValueError(f"No valid prompt combinations for {self.name}:\n{rules}")
 
         selected = Random(seed).choices(candidates, weights=weights, k=1)[0]
-        return Scene(selected, frozenset(self.break_before_dimensions))
+        return Scene(selected, tuple(self.elements))
+
+    def _add_dimension(self, name, options, *, break_before=False):
+        if name in self.dimensions:
+            raise ValueError(f"Dimension already exists: {name}")
+        if not options:
+            raise ValueError(f"Dimension must contain at least one option: {name}")
+        if break_before:
+            self._add_break()
+        self.dimensions[name] = tuple(options)
+        self.elements.append(("dimension", name))
+
+    def _add_fixed(self, value):
+        if isinstance(value, str):
+            fragments = [value]
+        elif isinstance(value, (list, tuple)):
+            fragments = value
+        else:
+            raise TypeError("fixed() accepts a string or a list of strings")
+
+        for fragment in fragments:
+            if not isinstance(fragment, str):
+                raise TypeError("fixed() accepts a string or a list of strings")
+            if fragment:
+                self.elements.append(("fixed", fragment))
+
+    def _add_break(self):
+        self.elements.append(("break", None))
 
     def _condition(self, dimension, key, tag):
         if dimension not in self.dimensions:

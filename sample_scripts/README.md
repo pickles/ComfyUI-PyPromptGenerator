@@ -42,31 +42,128 @@ from prompt_cdk import PromptProgram, option
 
 program = PromptProgram("SimplePortrait")
 
-program.dimension(
+program.fixed(["masterpiece", "best quality"])
+
+woman = program.block("woman", ["girl", "adult woman", "solo"])
+
+woman.dimension(
     "hair",
     option("bob", "short bob haircut"),
     option("long", "long wavy hair"),
 )
 
-program.dimension(
+woman.dimension(
     "outfit",
     option("swimsuit", "one-piece swimsuit", "swimwear"),
     option("casual", "knit sweater and jeans", "casual"),
 )
 
-program.dimension(
+woman.dimension(
     "location",
     option("beach", "sunny beach, blue ocean", "beach", "outdoor"),
     option("living_room", "cozy living room", "indoor", "home"),
 )
 
-program.when("location", tag="beach").require("outfit", tag="swimwear")
-program.when("location", tag="indoor").forbid("outfit", tag="swimwear")
+woman.when("location", tag="beach").require("outfit", tag="swimwear")
+woman.when("location", tag="indoor").forbid("outfit", tag="swimwear")
 
 scene = program.synth()
 
-positive_prompt = scene.prompt("masterpiece, best quality, solo")
+positive_prompt = scene.prompt(prefix="")
 negative_prompt = "low quality, blurry, bad anatomy"
+```
+
+## Fixed
+
+`fixed()` はランダム選択を行わず、指定した文字列を常にプロンプトへ追加します。文字列または文字列配列を渡せます。
+
+```python
+program.fixed("masterpiece")
+program.fixed(["best quality", "highly detailed"])
+```
+
+固定値もOptionと同様に1項目ずつ改行して出力されます。
+
+## Block
+
+`block()` は、人物などに関連する固定値とdimensionを連続したまとまりとして定義します。
+
+```python
+woman = program.block("woman", ["girl", "adult woman"])
+woman.dimension(
+    "hair",
+    option("bob", "short bob haircut"),
+    option("long", "long wavy hair"),
+)
+woman.dimension(
+    "body",
+    option("slender", "slender body"),
+    option("athletic", "athletic body"),
+)
+woman.dimension(
+    "pose",
+    option("standing", "standing pose"),
+    option("sitting", "sitting pose"),
+)
+
+program.break_()
+
+man = program.block("man", "boy")
+man.dimension(
+    "hair",
+    option("short", "short black hair"),
+    option("wavy", "wavy brown hair"),
+)
+man.dimension(
+    "pose",
+    option("standing", "standing pose"),
+    option("walking", "walking pose"),
+)
+```
+
+出力例:
+
+```text
+girl,
+adult woman,
+short bob haircut,
+slender body,
+standing pose,
+BREAK
+boy,
+short black hair,
+walking pose
+```
+
+人物を表す語と、その人物の髪型・体型・ポーズが近接するため、属性の対応付けが弱い古いStable Diffusionモデルでも利用しやすくなります。
+
+ブロック内のdimension名は自動的に名前空間化されます。
+
+```python
+scene.summary()
+
+# {
+#     "woman.hair": "bob",
+#     "woman.body": "slender",
+#     "woman.pose": "standing",
+#     "man.hair": "short",
+#     "man.pose": "walking",
+# }
+```
+
+ブロック内で `when()` を使用すると、同じブロックのdimension名を短い名前で指定できます。
+
+```python
+woman.when("location", tag="beach").require("outfit", tag="swimwear")
+```
+
+ブロックをまたぐ制約や、ブロック外のdimensionとの制約には完全名を使用します。
+
+```python
+program.when("location", tag="beach").require(
+    "woman.outfit",
+    tag="swimwear",
+)
 ```
 
 ## Option
@@ -187,7 +284,7 @@ program.dimension(
 )
 ```
 
-`break_()` の後には必ずdimensionを定義してください。末尾に `break_()` を置いたまま `synth()` するとエラーになります。
+`break_()` の後には必ずdimension、block、fixedなどのプロンプト要素を定義してください。末尾に `break_()` を置いたまま `synth()` するとエラーになります。
 
 従来の `break_before=True` をdimensionに指定する方法も利用できます。
 
@@ -352,11 +449,11 @@ print(scene.summary())
 
 ```python
 {
-    "hair": "short_bob",
-    "face": "gentle",
-    "body": "athletic",
-    "outfit": "one_piece_swimsuit",
-    "pose": "walking",
+    "woman.hair": "short_bob",
+    "woman.face": "gentle",
+    "woman.body": "athletic",
+    "woman.outfit": "one_piece_swimsuit",
+    "woman.pose": "walking",
     "location": "beach",
 }
 ```
@@ -367,6 +464,8 @@ print(scene.summary())
 
 このスクリプトには次の制約が含まれています。
 
+- 女性の固定値と属性を1つのblockとして定義
+- 品質タグを固定文字列配列として定義
 - 海辺では水着を要求
 - 水着は海辺でのみ使用
 - 室内では水着を禁止
