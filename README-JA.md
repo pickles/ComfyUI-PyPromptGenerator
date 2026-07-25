@@ -11,7 +11,7 @@ Pythonスクリプトを使用して動的なプロンプト生成を可能に�
 
 ## インストール
 
-⚠️ **重要な注意事項**: このカスタムノードは動的スクリプトの実行にPythonの`exec()`関数を使用しており、コード実行安全性に関するComfyUIカスタムノードガイドラインに適合しない可能性があります。参考として[ComfyUI Registry Standards](https://docs.comfy.org/registry/standards#eval%2Fexec-calls)をご確認ください。インストール前にセキュリティ要件をご確認の上、自己責任でご使用ください。
+⚠️ **重要な注意事項**: このカスタムノードはサンドボックス化されていないPythonコードを`exec()`で実行します。スクリプトは任意のモジュールをimportでき、ファイル、ネットワーク、プロセス、環境変数などへComfyUIプロセスと同じ権限でアクセスできます。信頼できないワークフローやスクリプトは実行しないでください。コード実行安全性に関するComfyUIカスタムノードガイドラインに適合しない可能性があります。参考として[ComfyUI Registry Standards](https://docs.comfy.org/registry/standards#eval%2Fexec-calls)をご確認ください。
 
 ### 手動インストール
 1. ComfyUIのインストールディレクトリに移動

@@ -26,6 +26,23 @@ class TestPyPromptGeneratorNode:
         assert positive == "beautiful landscape", "Incorrect positive prompt"
         assert negative == "ugly, blurry", "Incorrect negative prompt"
 
+    def test_unrestricted_python_environment(self, prompt_generator_node):
+        """Test arbitrary imports and standard builtins are available"""
+        script = """
+import pathlib
+import statistics
+
+module_name = pathlib.PurePath("full", "python").as_posix()
+average = statistics.mean([2, 4, 6])
+positive_prompt = f"{module_name}: {average}"
+negative_prompt = str(sum(range(4)))
+"""
+
+        positive, negative = prompt_generator_node.execute(script=script)
+
+        assert positive == "full/python: 4"
+        assert negative == "6"
+
     def test_choice_function_integration(self, prompt_generator_node, sample_scripts):
         """Test that choice function works within node execution"""
         script = sample_scripts["with_choice"]
