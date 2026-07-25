@@ -87,7 +87,10 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"src/pyprompt_generator/nodes.py" = ["F401"]  # Allow unused imports in nodes.py (used dynamically)
+"run_sample.py" = ["S102"]  # Sample runner intentionally executes a selected script
+"sample_scripts/*.py" = ["F821"]  # Utility functions and wildcards are injected at runtime
+"src/pyprompt_generator/nodes.py" = ["F401", "S102"]  # Imports and script execution are used dynamically
+"tests/sample_scripts/*.py" = ["F821"]  # Test scripts receive utility functions at runtime
 
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = "double"

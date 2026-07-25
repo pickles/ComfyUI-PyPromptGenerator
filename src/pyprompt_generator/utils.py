@@ -381,23 +381,31 @@ def _expand_nested_wildcards(wildcards):
     # Pattern to match {wildcard_name}
     pattern = re.compile(r"\{([^}]+)\}")
 
-    for var_name, entries in wildcards.items():
-        expanded_entries = []
+    # Resolve one nesting level per pass. A bounded number of passes makes the
+    # result independent of file/dictionary order while preventing infinite
+    # expansion for indirect cycles.
+    for _ in range(max(1, len(wildcards))):
+        changed = False
 
-        for entry in entries:
-            # Find all wildcard references in this entry
-            matches = pattern.findall(entry)
+        for var_name, entries in wildcards.items():
+            expanded_entries = []
 
-            if matches:
-                # Process each wildcard reference
+            for entry in entries:
                 expanded_entry = entry
-                for match in matches:
+
+                # Process each wildcard reference found at the start of this pass.
+                for match in pattern.findall(entry):
                     wildcard_ref = f"_{match}"  # Add underscore prefix
 
-                    if (
-                        wildcard_ref in wildcards and wildcard_ref != var_name
-                    ):  # Prevent self-reference
-                        # Replace with random selection from referenced wildcard
+                    if wildcard_ref == var_name:
+                        print(
+                            f"Warning: Self-reference detected in {var_name}: {{{match}}}"
+                        )
+                    elif wildcard_ref not in wildcards:
+                        print(
+                            f"Warning: Referenced wildcard not found: {{{match}}} in {var_name}"
+                        )
+                    else:
                         try:
                             replacement = choice(wildcards[wildcard_ref])
                             expanded_entry = expanded_entry.replace(
@@ -407,24 +415,16 @@ def _expand_nested_wildcards(wildcards):
                             print(
                                 f"Warning: Could not expand wildcard {{{match}}} in {var_name}: {e}"
                             )
-                            # Leave the reference as-is if expansion fails
-                    else:
-                        if wildcard_ref == var_name:
-                            print(
-                                f"Warning: Self-reference detected in {var_name}: {{{match}}}"
-                            )
-                        else:
-                            print(
-                                f"Warning: Referenced wildcard not found: {{{match}}} in {var_name}"
-                            )
+                            # Leave the reference as-is if expansion fails.
 
+                if expanded_entry != entry:
+                    changed = True
                 expanded_entries.append(expanded_entry)
-            else:
-                # No wildcard references, keep as-is
-                expanded_entries.append(entry)
 
-        # Update the entries with expanded versions
-        wildcards[var_name] = expanded_entries
+            wildcards[var_name] = expanded_entries
+
+        if not changed:
+            break
 
 
 class WildcardManager:

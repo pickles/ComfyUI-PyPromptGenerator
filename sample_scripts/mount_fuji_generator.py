@@ -260,7 +260,7 @@ print(f"\n【Negative Prompt】 ({len(negative_prompt)} characters):")
 print("-" * 40) 
 print(negative_prompt)
 
-print(f"\n【Statistics】:")
+print("\n【Statistics】:")
 print(f"- Number of wildcards used: {len([k for k in wildcards.keys() if k.startswith('_fuji')])}")
 print(f"- Foreground elements: {len(foreground_elements)}")
 print(f"- Artistic details: {len(artistic_details)}")
