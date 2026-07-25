@@ -16,6 +16,10 @@ AWS CDKでリソースを定義して最後にsynthするように、次の流�
   - CDK風のプロンプト定義フレームワーク
 - `generate_random_image_prompt.py`
   - 登場人物、服装、ポーズ、場所を定義した実行例
+- `generate_conditional_scene_prompt.py`
+  - グローバル条件、条件付きDimension、共有Dimensionの実行例
+- `shared_dimensions.py`
+  - 複数の生成スクリプトからimportできるDimension定義
 - `test_imports.py`
   - Python標準ライブラリと同一フォルダのモジュールをimportするテスト
 - `import_test_helper.py`
@@ -281,7 +285,117 @@ program.dimension(
 )
 ```
 
-各dimensionから必ず1つのoptionが選ばれます。
+通常のdimensionからは必ず1つのoptionが選ばれます。
+
+### Dimensionを別スクリプトで再利用する
+
+モジュール直下の `dimension()` 関数は、再利用可能なDimension定義を作成します。
+
+```python
+# shared_dimensions.py
+from prompt_cdk import dimension, option
+
+HAIR_LENGTH = dimension(
+    "hair_length",
+    option("short", "short hair"),
+    option("medium", "medium-length hair"),
+    option("long", "long hair"),
+)
+```
+
+生成スクリプトからimportし、通常のDimensionと同じ場所に渡します。
+
+```python
+from shared_dimensions import HAIR_LENGTH
+
+girl = program.block("girl", "girl")
+girl.dimension(HAIR_LENGTH)
+
+man = program.block("man", "man")
+man.dimension(HAIR_LENGTH)
+```
+
+ブロック内では、それぞれ `girl.hair_length` と `man.hair_length` になります。同じ定義を複数のプログラムやブロックで安全に共有できます。
+
+グローバルDimensionとしても利用できます。
+
+```python
+program.dimension(HAIR_LENGTH)
+```
+
+### 条件付きDimension
+
+`when().dimension()` は、条件に一致した場合だけ存在するDimensionを定義します。
+
+```python
+program.dimension(
+    "situation",
+    option("beach", "sunny beach"),
+    option("living", "cozy living room"),
+)
+
+girl = program.block("girl", "girl")
+girl.dimension(
+    "face",
+    option("smile", "smiling face"),
+    option("crying", "crying face"),
+)
+
+girl.when("program.situation", key="beach").dimension(
+    "action",
+    option("beach_bed", "sitting on a beach bed"),
+)
+girl.when("program.situation", key="living").dimension(
+    "action",
+    option("sofa", "sitting on a sofa"),
+)
+
+program.when("situation", key="living").dimension(
+    "room",
+    option("coffee", "coffee cup on the table"),
+)
+```
+
+`program.` は、ブロック内からグローバルDimensionを参照する名前空間です。
+
+| 記述 | 参照先 |
+|---|---|
+| `girl.when("face", ...)` | `girl.face` |
+| `girl.when("program.situation", ...)` | グローバルな `situation` |
+| `program.when("situation", ...)` | グローバルな `situation` |
+
+ブロック内の `require()` と `forbid()` でも同じ名前空間を使用できます。
+
+```python
+girl.when("action", key="sofa").require(
+    "program.situation",
+    key="living",
+)
+```
+
+条件付きDimensionの出力位置は、同名Dimensionを最初に定義した位置です。上記の宣言順は次のようになります。
+
+```text
+situation
+girl
+girl.face
+girl.action
+room
+```
+
+同じ `girl.action` を再度定義すると、出力位置を追加せずに条件分岐が追加されます。条件に一致する分岐がない場合、Dimensionはプロンプトと `scene.selection` の両方から省略されます。
+
+複数の分岐が同時に一致すると、曖昧な選択を防ぐため `synth()` がエラーを返します。
+
+```text
+ValueError: Multiple conditional branches matched dimension: girl.action
+```
+
+共有Dimensionも条件付きで利用できます。
+
+```python
+girl.when("program.situation", key="beach").dimension(HAIR_LENGTH)
+```
 
 ### Dimensionの前にBREAKを入れる
 
@@ -564,7 +678,7 @@ print(scene.summary())
 
 ## 完全な実行例
 
-実際の定義は `generate_random_image_prompt.py` を参照してください。
+基本的な制約は `generate_random_image_prompt.py`、条件付きDimensionと共有Dimensionは `generate_conditional_scene_prompt.py` を参照してください。
 
 このスクリプトには次の制約が含まれています。
 
