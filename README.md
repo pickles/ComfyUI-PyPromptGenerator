@@ -11,7 +11,7 @@ Perfect for scenarios where you need:
 
 ## Installation
 
-⚠️ **Important Notice**: This custom node uses Python's `exec()` function to execute dynamic scripts, which may not comply with some ComfyUI custom node guidelines regarding code execution safety. For reference, see the [ComfyUI Registry Standards](https://docs.comfy.org/registry/standards#eval%2Fexec-calls). Please review your security requirements before installation and use at your own discretion.
+⚠️ **Important Notice**: This custom node executes unsandboxed Python code with `exec()`. Scripts can import any module and access files, the network, processes, environment variables, and other resources with the same permissions as the ComfyUI process. Never run untrusted workflows or scripts. This may not comply with some ComfyUI custom node guidelines regarding code execution safety. For reference, see the [ComfyUI Registry Standards](https://docs.comfy.org/registry/standards#eval%2Fexec-calls).
 
 ### Manual Installation
 1. Navigate to your ComfyUI installation directory

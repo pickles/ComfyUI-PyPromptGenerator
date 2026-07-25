@@ -5,6 +5,7 @@ This module provides a custom node for ComfyUI that allows users to generate
 positive and negative prompts using Python scripts.
 """
 
+import builtins
 from datetime import datetime
 
 # Support for relative imports in ComfyUI environment
@@ -27,24 +28,18 @@ class PyPromptBaseNode:
 
     def _setup_execution_environment(self):
         """
-        Set up the execution environment with safe builtins, modules, and utility functions
+        Set up an unrestricted Python execution environment with utility functions.
+
+        Scripts run with the same permissions as the ComfyUI process. They can
+        import any installed module and access the filesystem, network, processes,
+        environment variables, and all other standard Python functionality.
+
         Returns: (global_vars, local_vars)
         """
         local_vars = {}
 
-        # Available built-in functions
-        safe_builtins = {
-            'len': len, 'str': str, 'int': int, 'float': float, 'bool': bool,
-            'list': list, 'dict': dict, 'tuple': tuple, 'set': set,
-            'range': range, 'enumerate': enumerate, 'zip': zip,
-            'min': min, 'max': max, 'sum': sum, 'abs': abs,
-            'round': round, 'sorted': sorted, 'reversed': reversed,
-            'isinstance': isinstance, 'type': type, 'hasattr': hasattr,
-            'globals': globals, 'locals': locals,  # For wildcard variable checking
-            'print': print  # For debugging
-        }
-
-        # Available modules
+        # Common modules are preloaded for convenience. Scripts may import any
+        # other installed module through the standard Python import mechanism.
         import random
         import math
         import datetime
@@ -75,7 +70,9 @@ class PyPromptBaseNode:
                     raise ImportError("Could not load utils module")
 
         global_vars = {
-            '__builtins__': safe_builtins,
+            # Use a copy so scripts have full builtins without mutating the
+            # process-wide builtins dictionary accidentally.
+            "__builtins__": vars(builtins).copy(),
             'random': random,
             'math': math,
             'datetime': datetime,
@@ -100,23 +97,6 @@ class PyPromptBaseNode:
             # WildcardManager class
             'WildcardManager': utils_module.WildcardManager,
         }
-
-        # Add safe import function
-        def safe_import(name, *args, **kwargs):
-            allowed_modules = {
-                'random': random,
-                'math': math,
-                'datetime': datetime,
-                're': re,
-                'json': json,
-                'time': time,
-                'os': os
-            }
-            if name in allowed_modules:
-                return allowed_modules[name]
-            return None
-
-        global_vars['__import__'] = safe_import
 
         # Automatically add wildcard variables to global variables
         try:
@@ -187,7 +167,7 @@ class PyPromptGeneratorNode(PyPromptBaseNode):
             "required": {
                 "script": ("STRING", {
                     "multiline": True, 
-                    "default": "# ComfyUI Prompt Generator with Wildcard Support\n# You can use import statements for available modules\nimport random\n\n# Built-in utility functions for enhanced prompt generation\n# Available functions: choice, weighted_choice, shuffle_list, random_range, random_boolean, join\n\n# === WILDCARD VARIABLES ===\n# Automatically loaded from wildcard/*.txt files:\n# _styles, _colors, _subjects (based on your wildcard files)\n# Empty lines and lines starting with # are ignored\n\n# Example: Using wildcard variables\nif '_styles' in globals():\n    selected_style = choice(_styles)  # Random style from styles.txt\nelse:\n    selected_style = 'realistic'  # fallback\n\nif '_colors' in globals():\n    selected_color = choice(_colors)  # Random color from colors.txt\nelse:\n    selected_color = 'vibrant'\n\nif '_subjects' in globals():\n    selected_subject = choice(_subjects)  # Random subject from subjects.txt\nelse:\n    selected_subject = 'portrait'\n\n# === WEIGHTED CHOICE EXAMPLES ===\n# Basic weighted choice example\neffects = ['3::detailed', '2::masterpiece', 'high quality', 'professional', 'artistic']\nselected_effects = choice(effects, 3)  # Pick 3 effects with weights\n\n# === UTILITY FUNCTIONS ===\n# Use random_range for numeric values\ndetail_level = random_range(1, 10)  # Random integer from 1 to 10\n\n# Use random_boolean for conditional logic\nif random_boolean(0.7):  # 70% chance\n    extra_effect = ', highly detailed'\nelse:\n    extra_effect = ''\n\n# === COMPOSE PROMPTS ===\n# Use join to create comma-separated strings\neffects_str = join(selected_effects)  # 'detailed, masterpiece, high quality'\nstyle_combo = join([selected_style, selected_color], ' ')  # 'realistic vibrant'\n\npositive_prompt = f'A {style_combo} {selected_subject}, {effects_str}{extra_effect}'\nnegative_prompt = 'low quality, blurry, worst quality'\n\n# === WILDCARD MANAGEMENT ===\n# To reload wildcard files after changes:\n# refresh_wildcards()  # Uncomment this line to force reload\n\n# === DEBUGGING ===\nprint(f'Used wildcards - Style: {selected_style}, Color: {selected_color}, Subject: {selected_subject}')\nprint(f'Effects: {join(selected_effects, \" + \")}, Detail Level: {detail_level}')\nprint(f'Available wildcard variables: {[k for k in globals().keys() if k.startswith(\"_\")]}')"
+                    "default": "# ComfyUI Prompt Generator with Wildcard Support\n# WARNING: This script runs as unrestricted Python with ComfyUI's permissions.\n# You can import any installed Python module and use standard builtins.\nimport random\n\n# Built-in utility functions for enhanced prompt generation\n# Available functions: choice, weighted_choice, shuffle_list, random_range, random_boolean, join\n\n# === WILDCARD VARIABLES ===\n# Automatically loaded from wildcard/*.txt files:\n# _styles, _colors, _subjects (based on your wildcard files)\n# Empty lines and lines starting with # are ignored\n\n# Example: Using wildcard variables\nif '_styles' in globals():\n    selected_style = choice(_styles)  # Random style from styles.txt\nelse:\n    selected_style = 'realistic'  # fallback\n\nif '_colors' in globals():\n    selected_color = choice(_colors)  # Random color from colors.txt\nelse:\n    selected_color = 'vibrant'\n\nif '_subjects' in globals():\n    selected_subject = choice(_subjects)  # Random subject from subjects.txt\nelse:\n    selected_subject = 'portrait'\n\n# === WEIGHTED CHOICE EXAMPLES ===\n# Basic weighted choice example\neffects = ['3::detailed', '2::masterpiece', 'high quality', 'professional', 'artistic']\nselected_effects = choice(effects, 3)  # Pick 3 effects with weights\n\n# === UTILITY FUNCTIONS ===\n# Use random_range for numeric values\ndetail_level = random_range(1, 10)  # Random integer from 1 to 10\n\n# Use random_boolean for conditional logic\nif random_boolean(0.7):  # 70% chance\n    extra_effect = ', highly detailed'\nelse:\n    extra_effect = ''\n\n# === COMPOSE PROMPTS ===\n# Use join to create comma-separated strings\neffects_str = join(selected_effects)  # 'detailed, masterpiece, high quality'\nstyle_combo = join([selected_style, selected_color], ' ')  # 'realistic vibrant'\n\npositive_prompt = f'A {style_combo} {selected_subject}, {effects_str}{extra_effect}'\nnegative_prompt = 'low quality, blurry, worst quality'\n\n# === WILDCARD MANAGEMENT ===\n# To reload wildcard files after changes:\n# refresh_wildcards()  # Uncomment this line to force reload\n\n# === DEBUGGING ===\nprint(f'Used wildcards - Style: {selected_style}, Color: {selected_color}, Subject: {selected_subject}')\nprint(f'Effects: {join(selected_effects, \" + \")}, Detail Level: {detail_level}')\nprint(f'Available wildcard variables: {[k for k in globals().keys() if k.startswith(\"_\")]}')"
                 }),
             }
         }
