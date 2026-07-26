@@ -1,7 +1,16 @@
 """Small CDK-like framework for constrained random prompt generation."""
 
 from dataclasses import dataclass
+from math import exp, log
 from random import Random
+
+
+class _FallbackLimitExceeded(Exception):
+    """The exact fallback reached its deliberately small search bound."""
+
+
+class _OverlapValidationLimitExceeded(Exception):
+    """The deterministic conditional-overlap proof exceeded its work budget."""
 
 
 @dataclass(frozen=True)
@@ -311,6 +320,10 @@ class PromptBlock:
 class PromptProgram:
     """Define prompt dimensions and synthesize a valid random scene."""
 
+    _MAX_PROPOSAL_ATTEMPTS = 10_000
+    _EXACT_FALLBACK_STATE_LIMIT = 10_000
+    _OVERLAP_VALIDATION_WORK_LIMIT = 100_000
+
     def __init__(self, name):
         self.name = name
         self.dimensions = {}
@@ -377,29 +390,221 @@ class PromptProgram:
         if self.elements and self.elements[-1][0] == "break":
             raise ValueError("break_() must be followed by prompt content")
 
-        states = [({}, 1.0)]
+        self._validate_conditional_overlaps()
+        random = Random(seed)
+        conditional_maxima = self._conditional_maximum_logs()
+        for _attempt in range(self._MAX_PROPOSAL_ATTEMPTS):
+            selected, correction_log = self._propose(random, conditional_maxima)
+            if not all(rule.accepts(selected) for rule in self.rules):
+                continue
+            if correction_log >= 0 or log(random.random()) <= correction_log:
+                return Scene(selected, tuple(self.elements))
+
+        selected = self._exact_fallback(random)
+        if selected is None:
+            rules = "\n".join(f"- {rule.describe()}" for rule in self.rules)
+            raise ValueError(f"No valid prompt combinations for {self.name}:\n{rules}")
+
+        return Scene(selected, tuple(self.elements))
+
+    def _conditional_maximum_logs(self):
+        return {
+            name: max(0.0, *(
+                _log_option_weight_total(branch.options) for branch in branches
+            ))
+            for name, branches in self.conditional_dimensions.items()
+        }
+
+    def _propose(self, random, conditional_maxima):
+        selected = {}
+        correction_log = 0.0
         for element_type, name in self.elements:
             if element_type != "dimension":
                 continue
             if name in self.dimensions:
-                states = self._expand_states(states, self.dimensions[name], name)
-            else:
-                states = self._expand_conditional_states(states, name)
+                selected[name] = random.choices(self.dimensions[name], weights=[
+                    option.weight for option in self.dimensions[name]
+                ])[0]
+                continue
 
-        valid_states = [
-            (selection, weight)
-            for selection, weight in states
-            if all(rule.accepts(selection) for rule in self.rules)
+            matching = self._matching_conditional_branches(name, selected)
+            if not matching:
+                continue
+            options = matching[0].options
+            selected[name] = random.choices(
+                options, weights=[option.weight for option in options]
+            )[0]
+            correction_log += (
+                _log_option_weight_total(options) - conditional_maxima[name]
+            )
+        return selected, correction_log
+
+    def _validate_conditional_overlaps(self):
+        positions = {
+            name: position
+            for position, (element_type, name) in enumerate(self.elements)
+            if element_type == "dimension"
+        }
+        domains = {
+            name: frozenset(options)
+            for name, options in self.dimensions.items()
+        }
+        domains.update({
+            name: frozenset(
+                option for branch in branches for option in branch.options
+            )
+            for name, branches in self.conditional_dimensions.items()
+        })
+        cache = {}
+        work = [0]
+        try:
+            for name, branches in self.conditional_dimensions.items():
+                for index, branch in enumerate(branches):
+                    for other in branches[index + 1:]:
+                        requirements = [
+                            self._normalize_requirement(
+                                branch.trigger, positions[name], positions, domains
+                            ),
+                            self._normalize_requirement(
+                                other.trigger, positions[name], positions, domains
+                            ),
+                        ]
+                        if None in requirements:
+                            continue
+                        if self._requirements_are_reachable(
+                            requirements, positions, domains, cache, work
+                        ):
+                            raise ValueError(
+                                "Multiple conditional branches matched dimension: "
+                                f"{name}"
+                            )
+        except _OverlapValidationLimitExceeded as error:
+            raise ValueError(
+                f"Conditional overlap validation limit exceeded for {self.name}"
+            ) from error
+
+    def _normalize_requirement(self, condition, cutoff, positions, domains):
+        if positions[condition.dimension] >= cutoff:
+            return None
+        allowed = frozenset(
+            option
+            for option in domains[condition.dimension]
+            if condition.matches({condition.dimension: option})
+        )
+        if not allowed:
+            return None
+        return condition.dimension, allowed
+
+    def _canonical_requirements(self, requirements, positions):
+        merged = {}
+        for name, allowed in requirements:
+            if name in merged:
+                allowed = merged[name] & allowed
+            if not allowed:
+                return None
+            merged[name] = allowed
+        return tuple(sorted(
+            merged.items(),
+            key=lambda requirement: (positions[requirement[0]], requirement[0]),
+        ))
+
+    def _requirements_are_reachable(self, requirements, positions, domains, cache, work):
+        canonical = self._canonical_requirements(requirements, positions)
+        if canonical is None:
+            return False
+        conditional = [
+            requirement
+            for requirement in canonical
+            if requirement[0] in self.conditional_dimensions
         ]
-        candidates = [selection for selection, _weight in valid_states]
-        weights = [weight for _selection, weight in valid_states]
+        if not conditional:
+            return True
+        if canonical in cache:
+            return cache[canonical]
+        self._consume_overlap_validation_work(work)
+        name, allowed = max(
+            conditional, key=lambda requirement: positions[requirement[0]]
+        )
+        remaining = [requirement for requirement in canonical if requirement[0] != name]
+        result = False
+        for branch in self.conditional_dimensions[name]:
+            for option in branch.options:
+                self._consume_overlap_validation_work(work)
+                if option not in allowed:
+                    continue
+                prerequisite = self._normalize_requirement(
+                    branch.trigger, positions[name], positions, domains
+                )
+                if prerequisite is None:
+                    continue
+                if self._requirements_are_reachable(
+                    [*remaining, prerequisite], positions, domains, cache, work
+                ):
+                    result = True
+                    break
+            if result:
+                break
+        cache[canonical] = result
+        return result
 
-        if not candidates:
-            rules = "\n".join(f"- {rule.describe()}" for rule in self.rules)
-            raise ValueError(f"No valid prompt combinations for {self.name}:\n{rules}")
+    def _consume_overlap_validation_work(self, work):
+        work[0] += 1
+        if work[0] > self._OVERLAP_VALIDATION_WORK_LIMIT:
+            raise _OverlapValidationLimitExceeded
 
-        selected = Random(seed).choices(candidates, weights=weights, k=1)[0]
-        return Scene(selected, tuple(self.elements))
+    def _matching_conditional_branches(self, name, selection):
+        matching = [
+            branch
+            for branch in self.conditional_dimensions[name]
+            if branch.trigger.matches(selection)
+        ]
+        if len(matching) > 1:
+            raise ValueError(
+                f"Multiple conditional branches matched dimension: {name}"
+            )
+        return matching
+
+    def _exact_fallback(self, random):
+        selected = None
+        total_weight = 0.0
+        states_seen = 0
+
+        def visit(index, selection, weight):
+            nonlocal selected, total_weight, states_seen
+            if index == len(self.elements):
+                if states_seen >= self._EXACT_FALLBACK_STATE_LIMIT:
+                    raise _FallbackLimitExceeded
+                states_seen += 1
+                if not all(rule.accepts(selection) for rule in self.rules):
+                    return
+                total_weight += weight
+                if random.random() * total_weight < weight:
+                    selected = selection
+                return
+
+            element_type, name = self.elements[index]
+            if element_type != "dimension":
+                visit(index + 1, selection, weight)
+                return
+            if name in self.dimensions:
+                for candidate in self.dimensions[name]:
+                    visit(index + 1, {**selection, name: candidate}, weight * candidate.weight)
+                return
+            matching = self._matching_conditional_branches(name, selection)
+            if not matching:
+                visit(index + 1, selection, weight)
+                return
+            for candidate in matching[0].options:
+                visit(index + 1, {**selection, name: candidate}, weight * candidate.weight)
+
+        try:
+            visit(0, {}, 1.0)
+        except _FallbackLimitExceeded as error:
+            raise ValueError(
+                f"No candidate found within bounded search for {self.name}; "
+                "constraints may be unsatisfiable or too selective"
+            ) from error
+        return selected
 
     def _add_dimension(self, name, options, *, break_before=False):
         if name in self.dimensions or name in self.conditional_dimensions:
@@ -431,41 +636,6 @@ class PromptProgram:
         self.conditional_dimensions[name].append(
             ConditionalBranch(trigger, tuple(options))
         )
-
-    @staticmethod
-    def _expand_states(states, options, name):
-        return [
-            (
-                {**selection, name: selected},
-                weight * selected.weight,
-            )
-            for selection, weight in states
-            for selected in options
-        ]
-
-    def _expand_conditional_states(self, states, name):
-        expanded = []
-        for selection, weight in states:
-            matching = [
-                branch
-                for branch in self.conditional_dimensions[name]
-                if branch.trigger.matches(selection)
-            ]
-            if len(matching) > 1:
-                raise ValueError(
-                    f"Multiple conditional branches matched dimension: {name}"
-                )
-            if not matching:
-                expanded.append((selection, weight))
-                continue
-            expanded.extend(
-                self._expand_states(
-                    [(selection, weight)],
-                    matching[0].options,
-                    name,
-                )
-            )
-        return expanded
 
     def _add_fixed(self, value):
         normalized = _normalize_fragments(value, "fixed")
@@ -561,3 +731,10 @@ def _normalize_fragments(value, function_name):
     if any(not isinstance(fragment, str) for fragment in value):
         raise TypeError(error_message)
     return tuple(fragment for fragment in value if fragment)
+
+
+def _log_option_weight_total(options):
+    """Return log(sum(weights)) without overflowing or underflowing first."""
+    log_weights = [log(option.weight) for option in options]
+    maximum = max(log_weights)
+    return maximum + log(sum(exp(weight - maximum) for weight in log_weights))

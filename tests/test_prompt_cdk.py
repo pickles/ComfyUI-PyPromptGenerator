@@ -1,6 +1,252 @@
 from random import choice
+from time import perf_counter
+
+import pytest
 
 from sample_scripts.prompt_cdk import PromptProgram, dimension, option
+
+
+def _conditional_chain_stress_program():
+    program = PromptProgram("ConditionalChainStress")
+    keys = [f"key{index}" for index in range(5)]
+    program.dimension("root", *(option(key, key) for key in keys))
+    previous = "root"
+    for level in range(7):
+        current = f"level{level}"
+        for key in keys:
+            program.when(previous, key=key).dimension(
+                current,
+                *(option(next_key, next_key) for next_key in keys),
+            )
+        previous = current
+    for key in keys:
+        program.when(previous, key=key).dimension(
+            "last", option("x", "last x")
+        )
+    program.when("last", key="x").dimension(
+        "detail", option("first", "first detail")
+    )
+    program.when("last", key="y").dimension(
+        "detail", option("second", "second detail")
+    )
+    return program
+
+
+def test_synth_handles_large_cartesian_product_without_materializing_it():
+    program = PromptProgram("LargeProduct")
+    for dimension_index in range(20):
+        program.dimension(
+            f"dimension_{dimension_index}",
+            *(option(f"option_{option_index}", str(option_index))
+              for option_index in range(10)),
+        )
+
+    first = program.synth(seed=123)
+    second = program.synth(seed=123)
+
+    assert len(first.selection) == 20
+    assert first.summary() == second.summary()
+
+
+def test_conditional_branch_weights_keep_raw_product_weighting():
+    program = PromptProgram("ConditionalWeights")
+    program.dimension(
+        "context", option("small", "small"), option("large", "large")
+    )
+    program.when("context", key="small").dimension(
+        "detail", option("small_detail", "small detail", weight=1)
+    )
+    program.when("context", key="large").dimension(
+        "detail",
+        option("large_detail_a", "large detail a", weight=1),
+        option("large_detail_b", "large detail b", weight=9),
+    )
+
+    large_count = sum(
+        program.synth(seed=seed).summary()["context"] == "large"
+        for seed in range(1_000)
+    )
+
+    assert 800 < large_count < 980
+
+
+def test_reachable_overlap_is_rejected_before_random_sampling():
+    program = PromptProgram("PartiallyOverlappingConditional")
+    program.dimension(
+        "context",
+        *(option(f"safe{index}", f"safe {index}") for index in range(99)),
+        option("overlap", "overlap"),
+    )
+    program.when("context", key="overlap").dimension(
+        "detail", option("first", "first detail")
+    )
+    program.when("context", key="overlap").dimension(
+        "detail", option("second", "second detail")
+    )
+
+    with pytest.raises(ValueError, match=(
+        "Multiple conditional branches matched dimension: detail"
+    )):
+        program.synth(seed=1)
+
+
+def test_mutually_exclusive_conditional_triggers_do_not_overlap():
+    program = PromptProgram("MutuallyExclusiveConditional")
+    program.dimension("context", option("a", "A"), option("b", "B"))
+    program.when("context", key="a").dimension(
+        "first", option("a_only", "first A")
+    )
+    program.when("context", key="b").dimension(
+        "second", option("b_only", "second B")
+    )
+    program.when("first", key="a_only").dimension(
+        "detail", option("a_detail", "detail A")
+    )
+    program.when("second", key="b_only").dimension(
+        "detail", option("b_detail", "detail B")
+    )
+
+    scene = program.synth(seed=1)
+
+    assert scene.summary() == {
+        "context": "a",
+        "first": "a_only",
+        "detail": "a_detail",
+    }
+
+
+def test_forward_conditional_branch_is_inactive_at_its_own_position():
+    program = PromptProgram("ForwardConditionalBranch")
+    program.dimension("root", option("a", "A"))
+    program.when("root", key="a").dimension("x", option("x1", "X1"))
+    program.when("x", key="x1").dimension("y", option("y1", "Y1"))
+    program.when("y", key="y1").dimension("x", option("x2", "X2"))
+
+    assert program.synth(seed=1).summary() == {
+        "root": "a",
+        "x": "x1",
+        "y": "y1",
+    }
+
+
+def test_recursive_forward_conditional_source_is_not_available_for_overlap():
+    program = PromptProgram("RecursiveForwardConditional")
+    program.dimension("root", option("a", "A"))
+    program.when("root", key="a").dimension("source", option("s1", "S1"))
+    program.when("source", key="s1").dimension("later", option("l1", "L1"))
+    program.when("later", key="l1").dimension("source", option("s2", "S2"))
+    program.when("source", key="s2").dimension(
+        "detail", option("from_forward", "forward detail")
+    )
+    program.when("root", key="a").dimension(
+        "detail", option("from_root", "root detail")
+    )
+
+    assert program.synth(seed=1).summary() == {
+        "root": "a",
+        "source": "s1",
+        "later": "l1",
+        "detail": "from_root",
+    }
+
+
+def test_reachable_pair_is_rejected_despite_unreachable_forward_branch():
+    program = PromptProgram("MixedConditionalOverlap")
+    program.dimension("root", option("a", "A"))
+    program.when("root", key="a").dimension("x", option("x1", "X1"))
+    program.when("x", key="x1").dimension("y", option("y1", "Y1"))
+    program.when("y", key="y1").dimension("x", option("x2", "X2"))
+    program.when("x", key="x2").dimension(
+        "detail", option("forward", "forward detail")
+    )
+    program.when("root", key="a").dimension(
+        "detail", option("first", "first detail")
+    )
+    program.when("root", key="a").dimension(
+        "detail", option("second", "second detail")
+    )
+
+    with pytest.raises(ValueError, match=(
+        "Multiple conditional branches matched dimension: detail"
+    )):
+        program.synth(seed=1)
+
+
+def test_conditional_overlap_validation_is_bounded_for_branching_chains():
+    program = _conditional_chain_stress_program()
+
+    started = perf_counter()
+    scene = program.synth(seed=1)
+
+    assert perf_counter() - started < 1.0
+    assert scene.summary()["detail"] == "first"
+
+
+def test_overlap_validation_cache_is_shared_across_branch_pairs(monkeypatch):
+    program = _conditional_chain_stress_program()
+    calls = 0
+    original = program._consume_overlap_validation_work
+
+    def count_work(work):
+        nonlocal calls
+        calls += 1
+        original(work)
+
+    monkeypatch.setattr(program, "_consume_overlap_validation_work", count_work)
+
+    program.synth(seed=1)
+
+    assert calls < 1_000
+
+
+def test_overlap_validation_limit_fails_closed_before_sampling(monkeypatch):
+    program = PromptProgram("OverlapValidationLimit")
+    program.dimension("context", option("a", "A"), option("b", "B"))
+    program.when("context", key="a").dimension("first", option("a", "A"))
+    program.when("context", key="b").dimension("second", option("b", "B"))
+    program.when("first", key="a").dimension("detail", option("a", "A"))
+    program.when("second", key="b").dimension("detail", option("b", "B"))
+    monkeypatch.setattr(program, "_OVERLAP_VALIDATION_WORK_LIMIT", 0)
+
+    with pytest.raises(ValueError, match=(
+        "Conditional overlap validation limit exceeded for OverlapValidationLimit"
+    )):
+        program.synth(seed=1)
+
+
+def test_extreme_conditional_weight_totals_do_not_underflow_before_logging():
+    program = PromptProgram("ExtremeConditionalWeights")
+    program.dimension(
+        "context", option("small", "small"), option("large", "large")
+    )
+    program.when("context", key="small").dimension(
+        "detail", option("small_detail", "small detail", weight=1e-300)
+    )
+    program.when("context", key="large").dimension(
+        "detail", option("large_detail", "large detail", weight=1e308)
+    )
+
+    assert program.synth(seed=1).summary()["context"] in {"small", "large"}
+
+
+def test_large_unsatisfiable_program_fails_after_bounded_search(monkeypatch):
+    program = PromptProgram("SelectiveProgram")
+    for dimension_index in range(5):
+        program.dimension(
+            f"dimension_{dimension_index}",
+            *(option(f"option_{option_index}", str(option_index))
+              for option_index in range(10)),
+        )
+    program.when("dimension_0", keys=[f"option_{index}" for index in range(10)]).require(
+        "dimension_1", key="missing"
+    )
+    monkeypatch.setattr(program, "_MAX_PROPOSAL_ATTEMPTS", 1)
+    monkeypatch.setattr(program, "_EXACT_FALLBACK_STATE_LIMIT", 10)
+
+    with pytest.raises(ValueError, match=(
+        "No candidate found within bounded search for SelectiveProgram"
+    )):
+        program.synth(seed=1)
 
 
 def test_prompt_renders_each_option_on_its_own_line():
