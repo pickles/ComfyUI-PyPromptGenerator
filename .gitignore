@@ -116,3 +116,5 @@ node.zip
 # Others
 wildcards/*.txt
 /scripts/
+/.codex-worktrees/
+/.codex-tmp/

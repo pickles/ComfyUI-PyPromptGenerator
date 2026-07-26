@@ -19,10 +19,12 @@ in the handoff, implementation logs in `RESULT.md`, and review evidence in
    ```
 
 3. Use the JSON output as the source of truth for `task_id`, `branch`,
-   `worktree`, and `handoff`.
+   `worktree`, `temp_dir`, and `handoff`.
 4. Complete every required section in `HANDOFF.md` before delegating.
 5. Keep each task in its own worktree. Never let two agents write to the same
    worktree concurrently.
+6. Edit the emitted worktree directly. Do not create a staging mirror; use
+   `run --task-id <id> -- <command>` when command-scoped Git and temp setup is needed.
 
 When the chat already runs in a Codex-managed worktree, first click
 **Create branch here** in Codex. Then create the handoff there instead of
