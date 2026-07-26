@@ -530,6 +530,91 @@ def test_reusable_dimension_can_be_used_conditionally():
     assert scene.summary()["girl.action"] in {"sitting", "walking"}
 
 
+def test_block_conditional_dimension_chain_keeps_each_branch_together():
+    program = PromptProgram("BlockConditionalChain")
+    program.dimension(
+        "situation",
+        option("a", "A situation"),
+        option("b", "B situation"),
+    )
+    girl = program.block("girl", "girl")
+    girl.when("program.situation", key="a").dimension(
+        "first", option("a1", "A1")
+    ).dimension("second", option("a2", "A2"))
+    girl.when("program.situation", key="b").dimension(
+        "first", option("b1", "B1")
+    ).dimension("second", option("b2", "B2"))
+
+    scenes = [program.synth(seed=seed) for seed in range(20)]
+
+    for scene in scenes:
+        branch = scene.summary()["situation"].upper()
+        assert scene.selection["girl.first"].key == f"{branch.lower()}1"
+        assert scene.selection["girl.second"].key == f"{branch.lower()}2"
+        assert scene.summary()["girl.first"] == f"{branch.lower()}1"
+        assert scene.summary()["girl.second"] == f"{branch.lower()}2"
+        assert f"{branch}1" in scene.prompt(prefix="")
+        assert f"{branch}2" in scene.prompt(prefix="")
+
+
+def test_program_conditional_dimension_chain_keeps_each_branch_together():
+    program = PromptProgram("ProgramConditionalChain")
+    program.dimension(
+        "situation",
+        option("a", "A situation"),
+        option("b", "B situation"),
+    )
+    program.when("situation", key="a").dimension(
+        "first", option("a1", "A1")
+    ).dimension("second", option("a2", "A2"))
+    program.when("situation", key="b").dimension(
+        "first", option("b1", "B1")
+    ).dimension("second", option("b2", "B2"))
+
+    for seed in range(20):
+        scene = program.synth(seed=seed)
+        branch = scene.summary()["situation"]
+        assert scene.selection["first"].key == f"{branch}1"
+        assert scene.selection["second"].key == f"{branch}2"
+        assert scene.summary()["first"] == f"{branch}1"
+        assert scene.summary()["second"] == f"{branch}2"
+
+
+def test_conditional_dimension_chain_supports_reusable_dimensions_and_owner_exit():
+    actions = dimension("action", option("a1", "A1"))
+    program = PromptProgram("ConditionalChainOwnerExit")
+    program.dimension(
+        "situation",
+        option("a", "A situation"),
+        option("b", "B situation"),
+    )
+    girl = program.block("girl", "girl")
+    girl.when("program.situation", key="a").dimension(actions).fixed(
+        "after condition"
+    ).dimension("always", option("yes", "always present"))
+
+    scenes = [program.synth(seed=seed) for seed in range(20)]
+    a_scene = next(scene for scene in scenes if scene.summary()["situation"] == "a")
+    b_scene = next(scene for scene in scenes if scene.summary()["situation"] == "b")
+
+    assert a_scene.summary()["girl.action"] == "a1"
+    assert a_scene.prompt(prefix="") == (
+        "A situation,\n"
+        "girl,\n"
+        "A1,\n"
+        "after condition,\n"
+        "always present"
+    )
+    assert "girl.action" not in b_scene.summary()
+    assert b_scene.summary()["girl.always"] == "yes"
+    assert b_scene.prompt(prefix="") == (
+        "B situation,\n"
+        "girl,\n"
+        "after condition,\n"
+        "always present"
+    )
+
+
 def test_program_namespace_works_for_block_rule_targets():
     program = PromptProgram("ProgramNamespaceTargets")
     program.dimension(
