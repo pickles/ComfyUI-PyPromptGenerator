@@ -98,8 +98,62 @@ def is_exact_reserved_temp(root: Path, task_id: str, slug: str, value: str) -> b
         return False
 
 
+def task_worktree_dir(root: Path, task_id: str, slug: str) -> Path:
+    """Return the one task directory that may be recovered automatically."""
+    if not TASK_PATTERN.fullmatch(task_id):
+        raise ValueError("task-id must look like YYYY-MM-DD-task-NNN")
+    if slug != normalize_slug(slug):
+        raise ValueError("slug must be normalized")
+    reserved_root = reserved_worktree_root(root).resolve()
+    candidate = (reserved_root / f"{task_id}-{slug}").resolve()
+    if candidate.parent != reserved_root:
+        raise RuntimeError("Task worktree path is outside the reserved worktree root")
+    return candidate
+
+
+def is_exact_reserved_worktree(root: Path, task_id: str, slug: str, value: Path) -> bool:
+    """Accept only the direct derived child of the canonical reserved root."""
+    try:
+        return value.resolve() == task_worktree_dir(root, task_id, slug)
+    except ValueError:
+        return False
+
+
+def is_link_like(path: Path) -> bool:
+    """Identify entries that must not be traversed while changing attributes."""
+    attributes = getattr(path.lstat(), "st_file_attributes", 0)
+    reparse_point = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return path.is_symlink() or bool(attributes & reparse_point)
+
+
+def add_owner_write(path: Path) -> None:
+    """Add owner-write without changing any other mode bits or following links."""
+    mode = stat.S_IMODE(path.lstat().st_mode)
+    path.chmod(mode | stat.S_IWUSR, follow_symlinks=False)
+
+
+def make_tree_writable(target: Path) -> None:
+    """Normalize a clean worktree without traversing symlinks or junctions."""
+    if is_link_like(target):
+        raise RuntimeError(f"Refusing to normalize link-like worktree target: {target}")
+    try:
+        for current, directories, files in os.walk(target, followlinks=False):
+            current_path = Path(current)
+            add_owner_write(current_path)
+            link_directories = [
+                name for name in directories if is_link_like(current_path / name)
+            ]
+            directories[:] = [name for name in directories if name not in link_directories]
+            for name in [*directories, *files]:
+                child = current_path / name
+                if not is_link_like(child):
+                    add_owner_write(child)
+    except OSError as error:
+        raise RuntimeError(f"Unable to make clean worktree writable: {target}") from error
+
+
 def make_writable(function, path: str, _exception: object) -> None:
-    Path(path).chmod(stat.S_IWRITE)
+    add_owner_write(Path(path))
     function(path)
 
 
@@ -118,6 +172,25 @@ def remove_reserved_task_temp(
             if time.monotonic() >= deadline:
                 raise RuntimeError(
                     f"Unable to remove reserved task temp directory: {target}"
+                ) from error
+            time.sleep(0.1)
+
+
+def remove_reserved_task_worktree(
+    root: Path, task_id: str, slug: str, timeout: float = 8.0
+) -> None:
+    """Safely remove only the exact derived reserved worktree residue."""
+    target = task_worktree_dir(root, task_id, slug)
+    deadline = time.monotonic() + timeout
+    while target.exists():
+        try:
+            shutil.rmtree(target, onerror=make_writable)
+        except OSError as error:
+            if not target.exists():
+                return
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    f"Unable to remove reserved task worktree residue: {target}"
                 ) from error
             time.sleep(0.1)
 
@@ -455,7 +528,37 @@ def cleanup(args: argparse.Namespace) -> None:
     temp_dir = task_temp_dir(root, args.task_id, slug)
     if temp_dir.exists():
         remove_reserved_task_temp(root, args.task_id, slug)
-    run_git("worktree", "remove", str(target), cwd=root)
+    make_tree_writable(target)
+    try:
+        run_git("worktree", "remove", str(target), cwd=root)
+    except subprocess.CalledProcessError as error:
+        refreshed = worktrees(root)
+        still_registered = any(
+            Path(current["worktree"]).resolve() == target
+            or current.get("branch") == branch_ref
+            for current in refreshed
+            if "worktree" in current
+        )
+        if still_registered:
+            raise RuntimeError(
+                f"Git worktree removal failed and the worktree remains registered: {target}"
+            ) from error
+        if target.exists():
+            if not is_exact_reserved_worktree(root, args.task_id, slug, target):
+                raise RuntimeError(
+                    "Git worktree registration is gone but residual target requires "
+                    f"manual filesystem cleanup: {target}; branch preserved"
+                ) from error
+            try:
+                remove_reserved_task_worktree(root, args.task_id, slug)
+            except RuntimeError as cleanup_error:
+                raise RuntimeError(
+                    f"Git removal partially succeeded; residual cleanup failed: {target}"
+                ) from cleanup_error
+    if target.exists():
+        raise RuntimeError(
+            f"Worktree target remains after removal; branch preserved: {target}"
+        )
     run_git("branch", "-d", branch, cwd=root)
     print(f"Removed worktree: {target}")
     print(f"Deleted merged local branch: {branch}")
