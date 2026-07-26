@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -95,6 +96,30 @@ def is_exact_reserved_temp(root: Path, task_id: str, slug: str, value: str) -> b
         return Path(value).resolve() == task_temp_dir(root, task_id, slug)
     except ValueError:
         return False
+
+
+def make_writable(function, path: str, _exception: object) -> None:
+    Path(path).chmod(stat.S_IWRITE)
+    function(path)
+
+
+def remove_reserved_task_temp(
+    root: Path, task_id: str, slug: str, timeout: float = 8.0
+) -> None:
+    """Safely remove only a derived task temp directory with bounded retries."""
+    target = task_temp_dir(root, task_id, slug)
+    deadline = time.monotonic() + timeout
+    while target.exists():
+        try:
+            shutil.rmtree(target, onerror=make_writable)
+        except OSError as error:
+            if not target.exists():
+                return
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    f"Unable to remove reserved task temp directory: {target}"
+                ) from error
+            time.sleep(0.1)
 
 
 def normalize_slug(value: str) -> str:
@@ -245,6 +270,8 @@ def start(args: argparse.Namespace) -> None:
         temp_dir.mkdir(parents=True)
         handoff = create_handoff(worktree, values)
     except Exception:
+        if temp_dir.exists():
+            remove_reserved_task_temp(root, task_id, slug)
         if created and worktree.exists():
             if run_git("status", "--porcelain", cwd=worktree):
                 print(
@@ -261,8 +288,6 @@ def start(args: argparse.Namespace) -> None:
                 )
         if created and not worktree.exists():
             run_git("branch", "-D", branch, cwd=root, check=False)
-        if temp_dir.exists():
-            shutil.rmtree(temp_dir)
         raise
     emit(values, handoff)
 
@@ -294,7 +319,7 @@ def init_handoff(args: argparse.Namespace) -> None:
     try:
         handoff = create_handoff(worktree, values)
     except Exception:
-        shutil.rmtree(temp_dir)
+        remove_reserved_task_temp(worktree, task_id, slug)
         raise
     emit(values, handoff)
 
@@ -369,7 +394,7 @@ def prepare_close(_args: argparse.Namespace) -> None:
     if review_values.get("Verdict") != "APPROVED":
         raise RuntimeError("REVIEW.md must contain 'Verdict: APPROVED'")
     if temp_dir.exists():
-        shutil.rmtree(temp_dir)
+        remove_reserved_task_temp(root, task_id, slug)
     shutil.rmtree(handoff)
     for parent in (handoff.parent, handoff.parent.parent):
         if parent.exists() and not any(parent.iterdir()):
@@ -429,7 +454,7 @@ def cleanup(args: argparse.Namespace) -> None:
         raise RuntimeError(f"Invalid task branch: {branch}")
     temp_dir = task_temp_dir(root, args.task_id, slug)
     if temp_dir.exists():
-        shutil.rmtree(temp_dir)
+        remove_reserved_task_temp(root, args.task_id, slug)
     run_git("worktree", "remove", str(target), cwd=root)
     run_git("branch", "-d", branch, cwd=root)
     print(f"Removed worktree: {target}")

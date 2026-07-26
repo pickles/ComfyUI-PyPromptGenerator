@@ -2,6 +2,7 @@ import argparse
 import importlib.util
 import os
 import shutil
+import stat
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -425,3 +426,59 @@ def test_reserved_temp_root_rejects_external_link_or_junction(tmp_path):
     with pytest.raises(RuntimeError, match="link or junction"):
         TASK_WORKTREE.reserved_temp_root(repo)
     assert marker.read_text(encoding="utf-8") == "keep"
+
+
+def test_reserved_task_temp_cleanup_removes_readonly_contents(tmp_path):
+    repo = init_repo(tmp_path / "repo")
+    temp_dir = TASK_WORKTREE.task_temp_dir(repo, "2026-07-25-task-001", "cleanup")
+    temp_dir.mkdir(parents=True)
+    locked = temp_dir / "readonly.txt"
+    locked.write_text("temporary", encoding="utf-8")
+    locked.chmod(stat.S_IREAD)
+
+    TASK_WORKTREE.remove_reserved_task_temp(
+        repo, "2026-07-25-task-001", "cleanup"
+    )
+
+    assert not temp_dir.exists()
+
+
+def test_reserved_task_temp_cleanup_retries_transient_failure(tmp_path, monkeypatch):
+    repo = init_repo(tmp_path / "repo")
+    temp_dir = TASK_WORKTREE.task_temp_dir(repo, "2026-07-25-task-001", "cleanup")
+    temp_dir.mkdir(parents=True)
+    original_rmtree = shutil.rmtree
+    calls = 0
+
+    def transient_rmtree(path, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise PermissionError("temporary lock")
+        original_rmtree(path, **kwargs)
+
+    monkeypatch.setattr(TASK_WORKTREE.shutil, "rmtree", transient_rmtree)
+    TASK_WORKTREE.remove_reserved_task_temp(
+        repo, "2026-07-25-task-001", "cleanup", timeout=1
+    )
+
+    assert calls == 2
+    assert not temp_dir.exists()
+
+
+def test_reserved_task_temp_cleanup_raises_for_permanent_failure(
+    tmp_path, monkeypatch
+):
+    repo = init_repo(tmp_path / "repo")
+    temp_dir = TASK_WORKTREE.task_temp_dir(repo, "2026-07-25-task-001", "cleanup")
+    temp_dir.mkdir(parents=True)
+
+    def permanent_rmtree(_path, **_kwargs):
+        raise PermissionError("permanent lock")
+
+    monkeypatch.setattr(TASK_WORKTREE.shutil, "rmtree", permanent_rmtree)
+    with pytest.raises(RuntimeError, match="Unable to remove reserved task temp"):
+        TASK_WORKTREE.remove_reserved_task_temp(
+            repo, "2026-07-25-task-001", "cleanup", timeout=0
+        )
+    assert temp_dir.exists()

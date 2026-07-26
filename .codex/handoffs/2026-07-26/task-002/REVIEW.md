@@ -20,10 +20,11 @@ Verdict: APPROVED
 ## Verification
 
 - `run --task-id 2026-07-26-task-002 -- python .codex/scripts/check.py`:
-  Ruff passed and 147 tests passed.
+  Ruff passed and 150 tests passed.
 - Windows junction/symlink regression passed and preserved the external marker.
 - Windows cleanup retry, permanent-failure propagation, and fixed-length
   execution-identity hashing passed.
+- Task-temp readonly cleanup, bounded retry, and failure-ordering passed.
 - Reviewed recursive deletion targets and derived-path containment.
 
 ## Residual risks

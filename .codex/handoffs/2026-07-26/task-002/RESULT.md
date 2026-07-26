@@ -15,7 +15,7 @@ Validation: PASSED
 ## Validation results
 
 - `python .agents/skills/agent-task-workflow/scripts/task_worktree.py run --task-id 2026-07-26-task-002 -- python .codex/scripts/check.py`:
-  passed (Ruff and 147 tests); its short, execution-principal-hash-isolated
+  passed (Ruff and 150 tests); its short, execution-principal-hash-isolated
   system-temp pytest child and its empty parent were removed in `finally`.
 
 ## Deviations from design
