@@ -7,6 +7,7 @@ State: DESIGN
 Base: {{BASE}}
 Branch: {{BRANCH}}
 Worktree: {{WORKTREE}}
+Temp Directory: {{TEMP_DIR}}
 
 ## Objective
 

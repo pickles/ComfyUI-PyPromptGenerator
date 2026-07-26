@@ -49,6 +49,9 @@ thread. Return concise evidence and decisions from subagents.
 - Never force-remove a dirty or unmerged worktree.
 - Prefer Codex-managed Worktree chats for interactive background work. Use the
   lifecycle script when an orchestrated task needs deterministic paths.
+- Edit task Worktrees directly; do not create staging mirrors. Use the lifecycle
+  script's `run --task-id ... -- <command>` helper for task-scoped Git and temp
+  environment setup.
 
 ## Engineering conventions
 

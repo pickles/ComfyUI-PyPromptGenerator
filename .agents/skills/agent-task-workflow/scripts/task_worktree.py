@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -40,6 +41,60 @@ def common_git_dir(root: Path) -> Path:
         cwd=root,
     )
     return Path(value).resolve()
+
+
+def primary_checkout(root: Path) -> Path:
+    """Return Git's primary worktree, including separate-git-dir repositories."""
+    entries = worktrees(root)
+    if not entries or "worktree" not in entries[0]:
+        raise RuntimeError("Unable to identify the primary Git worktree")
+    primary = Path(entries[0]["worktree"]).resolve()
+    if (primary / ".git").exists():
+        return primary
+    separate_worktree = run_git(
+        "config", "--path", "--get", "core.worktree", cwd=root, check=False
+    )
+    if separate_worktree:
+        candidate = Path(separate_worktree).resolve()
+        if (candidate / ".git").exists():
+            return candidate
+    raise RuntimeError("Unable to identify the primary Git worktree")
+
+
+def reserved_worktree_root(root: Path) -> Path:
+    return reserved_root(root, ".codex-worktrees")
+
+
+def reserved_temp_root(root: Path) -> Path:
+    return reserved_root(root, ".codex-tmp")
+
+
+def reserved_root(root: Path, name: str) -> Path:
+    """Reject reserved storage redirected outside the canonical primary checkout."""
+    lexical = primary_checkout(root).resolve() / name
+    if lexical.resolve() != lexical:
+        raise RuntimeError(f"Reserved path must not be a link or junction: {lexical}")
+    return lexical
+
+
+def task_temp_dir(root: Path, task_id: str, slug: str) -> Path:
+    if not TASK_PATTERN.fullmatch(task_id):
+        raise ValueError("task-id must look like YYYY-MM-DD-task-NNN")
+    if slug != normalize_slug(slug):
+        raise ValueError("slug must be normalized")
+    reserved_root = reserved_temp_root(root).resolve()
+    candidate = (reserved_root / f"{task_id}-{slug}").resolve()
+    if candidate.parent != reserved_root:
+        raise RuntimeError("Task temp path is outside the reserved temp root")
+    return candidate
+
+
+def is_exact_reserved_temp(root: Path, task_id: str, slug: str, value: str) -> bool:
+    """Accept only the derived task temp path, never an arbitrary metadata path."""
+    try:
+        return Path(value).resolve() == task_temp_dir(root, task_id, slug)
+    except ValueError:
+        return False
 
 
 def normalize_slug(value: str) -> str:
@@ -133,6 +188,7 @@ def emit(values: dict[str, str], handoff: Path) -> None:
         "branch": values["BRANCH"],
         "base": values["BASE"],
         "worktree": values["WORKTREE"],
+        "temp_dir": values["TEMP_DIR"],
         "handoff": str(handoff),
     }
     print(json.dumps(payload, indent=2))
@@ -145,12 +201,13 @@ def start(args: argparse.Namespace) -> None:
     worktree_root = (
         Path(args.worktree_root).resolve()
         if args.worktree_root
-        else root.parent / f"{root.name}-worktrees"
+        else reserved_worktree_root(root)
     )
     number = next_task_number(root, task_date)
     task_id = f"{task_date}-task-{number:03d}"
     branch = f"codex/{task_id}-{slug}"
     worktree = (worktree_root / f"{task_id}-{slug}").resolve()
+    temp_dir = task_temp_dir(root, task_id, slug)
     values = {
         "TASK_ID": task_id,
         "SLUG": slug,
@@ -158,6 +215,7 @@ def start(args: argparse.Namespace) -> None:
         "BASE": args.base,
         "BRANCH": branch,
         "WORKTREE": str(worktree),
+        "TEMP_DIR": str(temp_dir),
     }
 
     if worktree.exists():
@@ -170,6 +228,8 @@ def start(args: argparse.Namespace) -> None:
     if branch_exists.returncode == 0:
         raise FileExistsError(f"Branch already exists: {branch}")
     worktree_root.mkdir(parents=True, exist_ok=True)
+    if temp_dir.exists():
+        raise FileExistsError(f"Task temp path already exists: {temp_dir}")
     created = False
     try:
         run_git(
@@ -182,6 +242,7 @@ def start(args: argparse.Namespace) -> None:
             cwd=root,
         )
         created = True
+        temp_dir.mkdir(parents=True)
         handoff = create_handoff(worktree, values)
     except Exception:
         if created and worktree.exists():
@@ -200,6 +261,8 @@ def start(args: argparse.Namespace) -> None:
                 )
         if created and not worktree.exists():
             run_git("branch", "-D", branch, cwd=root, check=False)
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
         raise
     emit(values, handoff)
 
@@ -215,6 +278,9 @@ def init_handoff(args: argparse.Namespace) -> None:
     task_date = normalize_date(args.date) if args.date else date.today().isoformat()
     number = next_task_number(worktree, task_date)
     task_id = f"{task_date}-task-{number:03d}"
+    temp_dir = task_temp_dir(worktree, task_id, slug)
+    if temp_dir.exists():
+        raise FileExistsError(f"Task temp path already exists: {temp_dir}")
     values = {
         "TASK_ID": task_id,
         "SLUG": slug,
@@ -222,8 +288,14 @@ def init_handoff(args: argparse.Namespace) -> None:
         "BASE": args.base,
         "BRANCH": branch,
         "WORKTREE": str(worktree),
+        "TEMP_DIR": str(temp_dir),
     }
-    handoff = create_handoff(worktree, values)
+    temp_dir.mkdir(parents=True)
+    try:
+        handoff = create_handoff(worktree, values)
+    except Exception:
+        shutil.rmtree(temp_dir)
+        raise
     emit(values, handoff)
 
 
@@ -277,6 +349,11 @@ def prepare_close(_args: argparse.Namespace) -> None:
                 f"HANDOFF.md {key} must be {expected!r}, "
                 f"found {handoff_values.get(key)!r}"
             )
+    slug = handoff_values.get("Slug", "")
+    temp_metadata = handoff_values.get("Temp Directory", "")
+    if not is_exact_reserved_temp(root, task_id, slug, temp_metadata):
+        raise RuntimeError("HANDOFF.md Temp Directory is not the reserved task path")
+    temp_dir = task_temp_dir(root, task_id, slug)
 
     result_values = metadata(handoff / "RESULT.md")
     if result_values.get("Task ID") != task_id:
@@ -291,6 +368,8 @@ def prepare_close(_args: argparse.Namespace) -> None:
         raise RuntimeError("REVIEW.md Task ID does not match the handoff")
     if review_values.get("Verdict") != "APPROVED":
         raise RuntimeError("REVIEW.md must contain 'Verdict: APPROVED'")
+    if temp_dir.exists():
+        shutil.rmtree(temp_dir)
     shutil.rmtree(handoff)
     for parent in (handoff.parent, handoff.parent.parent):
         if parent.exists() and not any(parent.iterdir()):
@@ -345,10 +424,48 @@ def cleanup(args: argparse.Namespace) -> None:
     )
     if merged.returncode != 0:
         raise RuntimeError(f"Branch {branch} is not merged into {args.base}")
+    slug = branch.removeprefix(f"codex/{args.task_id}-")
+    if not slug or "/" in slug:
+        raise RuntimeError(f"Invalid task branch: {branch}")
+    temp_dir = task_temp_dir(root, args.task_id, slug)
+    if temp_dir.exists():
+        shutil.rmtree(temp_dir)
     run_git("worktree", "remove", str(target), cwd=root)
     run_git("branch", "-d", branch, cwd=root)
     print(f"Removed worktree: {target}")
     print(f"Deleted merged local branch: {branch}")
+
+
+def run(args: argparse.Namespace) -> None:
+    if not TASK_PATTERN.fullmatch(args.task_id):
+        raise ValueError("task-id must look like YYYY-MM-DD-task-NNN")
+    command = list(args.command)
+    if command and command[0] == "--":
+        command.pop(0)
+    if not command:
+        raise ValueError("run requires a command after --")
+    root = repo_root(Path.cwd())
+    matches = [
+        entry for entry in worktrees(root)
+        if entry.get("branch", "").startswith(f"refs/heads/codex/{args.task_id}-")
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(f"Expected one worktree for {args.task_id}, found {len(matches)}")
+    target = Path(matches[0]["worktree"]).resolve()
+    slug = matches[0]["branch"].removeprefix(f"refs/heads/codex/{args.task_id}-")
+    temp_dir = task_temp_dir(root, args.task_id, slug)
+    if not temp_dir.is_dir():
+        raise RuntimeError(f"Reserved task temp directory does not exist: {temp_dir}")
+    env = os.environ.copy()
+    env["CODEX_SYSTEM_TEMP"] = str(Path(tempfile.gettempdir()).resolve())
+    count = int(env.get("GIT_CONFIG_COUNT", "0"))
+    env["GIT_CONFIG_COUNT"] = str(count + 1)
+    env[f"GIT_CONFIG_KEY_{count}"] = "safe.directory"
+    env[f"GIT_CONFIG_VALUE_{count}"] = str(target)
+    for name in ("TEMP", "TMP", "TMPDIR"):
+        env[name] = str(temp_dir)
+    result = subprocess.run(command, cwd=target, env=env, check=False)
+    raise SystemExit(result.returncode)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -375,6 +492,11 @@ def parser() -> argparse.ArgumentParser:
     cleanup_parser.add_argument("--task-id", required=True)
     cleanup_parser.add_argument("--base", default="main")
     cleanup_parser.set_defaults(handler=cleanup)
+
+    run_parser = commands.add_parser("run")
+    run_parser.add_argument("--task-id", required=True)
+    run_parser.add_argument("command", nargs=argparse.REMAINDER)
+    run_parser.set_defaults(handler=run)
     return root
 
 
