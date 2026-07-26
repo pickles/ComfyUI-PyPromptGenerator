@@ -482,3 +482,159 @@ def test_reserved_task_temp_cleanup_raises_for_permanent_failure(
             repo, "2026-07-25-task-001", "cleanup", timeout=0
         )
     assert temp_dir.exists()
+
+
+def configure_cleanup(monkeypatch, repo, target, task_id, slug, refreshed=None):
+    branch = f"codex/{task_id}-{slug}"
+    entry = {"worktree": str(target), "branch": f"refs/heads/{branch}"}
+    calls = []
+    listings = [[entry], refreshed if refreshed is not None else []]
+
+    monkeypatch.setattr(TASK_WORKTREE, "repo_root", lambda _cwd: repo)
+    monkeypatch.setattr(TASK_WORKTREE, "primary_checkout", lambda _root: repo)
+
+    def fake_worktrees(_root):
+        return listings.pop(0) if listings else []
+
+    monkeypatch.setattr(TASK_WORKTREE, "worktrees", fake_worktrees)
+    monkeypatch.setattr(TASK_WORKTREE.subprocess, "run", lambda *_args, **_kwargs: type("Result", (), {"returncode": 0})())
+
+    def fake_git(*args, cwd, check=True):
+        calls.append(args)
+        if args == ("status", "--porcelain"):
+            return ""
+        if args[:2] == ("worktree", "remove"):
+            shutil.rmtree(target)
+        return ""
+
+    monkeypatch.setattr(TASK_WORKTREE, "run_git", fake_git)
+    return argparse.Namespace(task_id=task_id, base="main"), branch, calls
+
+
+def test_cleanup_makes_readonly_tree_writable_then_deletes_branch(tmp_path, monkeypatch):
+    repo = init_repo(tmp_path / "repo")
+    task_id, slug = "2026-07-26-task-001", "cleanup"
+    target = TASK_WORKTREE.task_worktree_dir(repo, task_id, slug)
+    target.mkdir(parents=True)
+    locked = target / "readonly.txt"
+    locked.write_text("clean", encoding="utf-8")
+    locked.chmod(stat.S_IREAD)
+    args, branch, calls = configure_cleanup(monkeypatch, repo, target, task_id, slug)
+
+    TASK_WORKTREE.cleanup(args)
+
+    assert not target.exists()
+    assert ("branch", "-d", branch) in calls
+
+
+def test_cleanup_preserves_registered_failed_worktree(tmp_path, monkeypatch):
+    repo = init_repo(tmp_path / "repo")
+    task_id, slug = "2026-07-26-task-001", "cleanup"
+    target = TASK_WORKTREE.task_worktree_dir(repo, task_id, slug)
+    target.mkdir(parents=True)
+    branch = f"codex/{task_id}-{slug}"
+    entry = {"worktree": str(target), "branch": f"refs/heads/{branch}"}
+    args, _, calls = configure_cleanup(monkeypatch, repo, target, task_id, slug, [entry])
+
+    def failed_remove(*args, cwd, check=True):
+        calls.append(args)
+        if args == ("status", "--porcelain"):
+            return ""
+        if args[:2] == ("worktree", "remove"):
+            raise subprocess.CalledProcessError(255, ["git", *args], stderr="locked")
+        return ""
+
+    monkeypatch.setattr(TASK_WORKTREE, "run_git", failed_remove)
+    with pytest.raises(RuntimeError, match="remains registered"):
+        TASK_WORKTREE.cleanup(args)
+
+    assert target.exists()
+    assert not any(call[:2] == ("branch", "-d") for call in calls)
+
+
+def test_cleanup_recovers_unregistered_reserved_residue(tmp_path, monkeypatch):
+    repo = init_repo(tmp_path / "repo")
+    task_id, slug = "2026-07-26-task-001", "cleanup"
+    target = TASK_WORKTREE.task_worktree_dir(repo, task_id, slug)
+    target.mkdir(parents=True)
+    (target / "readonly.txt").write_text("clean", encoding="utf-8")
+    args, branch, calls = configure_cleanup(monkeypatch, repo, target, task_id, slug, [])
+    original_rmtree = shutil.rmtree
+    removals = 0
+
+    def transient_rmtree(path, **kwargs):
+        nonlocal removals
+        removals += 1
+        if removals == 1:
+            raise PermissionError("transient lock")
+        original_rmtree(path, **kwargs)
+
+    def failed_remove(*git_args, cwd, check=True):
+        calls.append(git_args)
+        if git_args == ("status", "--porcelain"):
+            return ""
+        if git_args[:2] == ("worktree", "remove"):
+            raise subprocess.CalledProcessError(255, ["git", *git_args], stderr="partial")
+        return ""
+
+    monkeypatch.setattr(TASK_WORKTREE, "run_git", failed_remove)
+    monkeypatch.setattr(TASK_WORKTREE.shutil, "rmtree", transient_rmtree)
+    TASK_WORKTREE.cleanup(args)
+
+    assert removals == 2
+    assert not target.exists()
+    assert ("branch", "-d", branch) in calls
+
+
+def test_cleanup_preserves_branch_when_reserved_residue_cannot_be_removed(
+    tmp_path, monkeypatch
+):
+    repo = init_repo(tmp_path / "repo")
+    task_id, slug = "2026-07-26-task-001", "cleanup"
+    target = TASK_WORKTREE.task_worktree_dir(repo, task_id, slug)
+    target.mkdir(parents=True)
+    args, _, calls = configure_cleanup(monkeypatch, repo, target, task_id, slug, [])
+
+    def failed_remove(*git_args, cwd, check=True):
+        calls.append(git_args)
+        if git_args == ("status", "--porcelain"):
+            return ""
+        if git_args[:2] == ("worktree", "remove"):
+            raise subprocess.CalledProcessError(255, ["git", *git_args], stderr="partial")
+        return ""
+
+    def permanent_rmtree(_path, **_kwargs):
+        raise PermissionError("permanent lock")
+
+    ticks = iter([0.0, 9.0])
+    monkeypatch.setattr(TASK_WORKTREE, "run_git", failed_remove)
+    monkeypatch.setattr(TASK_WORKTREE.shutil, "rmtree", permanent_rmtree)
+    monkeypatch.setattr(TASK_WORKTREE.time, "monotonic", lambda: next(ticks))
+    with pytest.raises(RuntimeError, match="residual cleanup failed"):
+        TASK_WORKTREE.cleanup(args)
+
+    assert target.exists()
+    assert not any(call[:2] == ("branch", "-d") for call in calls)
+
+
+def test_cleanup_refuses_unregistered_external_residue(tmp_path, monkeypatch):
+    repo = init_repo(tmp_path / "repo")
+    task_id, slug = "2026-07-26-task-001", "cleanup"
+    target = tmp_path / "external-worktree"
+    target.mkdir()
+    args, _, calls = configure_cleanup(monkeypatch, repo, target, task_id, slug, [])
+
+    def failed_remove(*git_args, cwd, check=True):
+        calls.append(git_args)
+        if git_args == ("status", "--porcelain"):
+            return ""
+        if git_args[:2] == ("worktree", "remove"):
+            raise subprocess.CalledProcessError(255, ["git", *git_args], stderr="partial")
+        return ""
+
+    monkeypatch.setattr(TASK_WORKTREE, "run_git", failed_remove)
+    with pytest.raises(RuntimeError, match="manual filesystem cleanup"):
+        TASK_WORKTREE.cleanup(args)
+
+    assert target.exists()
+    assert not any(call[:2] == ("branch", "-d") for call in calls)
