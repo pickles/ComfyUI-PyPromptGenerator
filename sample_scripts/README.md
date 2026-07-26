@@ -397,6 +397,28 @@ ValueError: Multiple conditional branches matched dimension: girl.action
 girl.when("program.situation", key="beach").dimension(HAIR_LENGTH)
 ```
 
+同じ条件に複数のDimensionを追加する場合は、`dimension()` をそのまま連結します。連結した呼び出しだけが同一条件を共有します。
+
+```python
+girl.when("program.situation", key="beach").dimension(
+    "action",
+    option("beach_bed", "sitting on a beach bed"),
+).dimension(
+    "prop",
+    option("parasol", "beach parasol"),
+)
+```
+
+`fixed()`、`break_()` などblockまたはprogramのメソッドを呼ぶと条件付き連結から抜け、そのメソッド本来の戻り値に従います。その後の通常の `dimension()` は無条件です。
+
+```python
+girl.when("program.situation", key="beach").dimension(
+    "action", option("beach_bed", "sitting on a beach bed")
+).fixed("summer scene").dimension(
+    "mood", option("calm", "calm atmosphere")
+)
+```
+
 ### Dimensionの前にBREAKを入れる
 
 dimension定義の間に `break_()` を置くと、次のdimensionの直前に `BREAK` が入ります。

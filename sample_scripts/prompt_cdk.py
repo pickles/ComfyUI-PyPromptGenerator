@@ -160,6 +160,20 @@ class Scene:
         return "\n".join(rendered)
 
 
+class ConditionalDimensionChain:
+    """Keep a conditional dimension declaration active for one expression."""
+
+    def __init__(self, builder):
+        self.builder = builder
+
+    def dimension(self, name, *options):
+        self.builder._add_conditional_dimension(name, options)
+        return self
+
+    def __getattr__(self, name):
+        return getattr(self.builder.return_target, name)
+
+
 class ConstraintBuilder:
     def __init__(self, program, trigger, resolve_dimension=None, return_target=None):
         self.program = program
@@ -223,6 +237,10 @@ class ConstraintBuilder:
 
     def dimension(self, name, *options):
         """Add options used only while this builder's condition matches."""
+        self._add_conditional_dimension(name, options)
+        return ConditionalDimensionChain(self)
+
+    def _add_conditional_dimension(self, name, options):
         name, options, break_before = _dimension_arguments(name, options)
         name = self.resolve_dimension(name)
         self.program._add_conditional_dimension(
@@ -231,7 +249,6 @@ class ConstraintBuilder:
             self.trigger,
             break_before=break_before,
         )
-        return self.return_target
 
 
 class PromptBlock:
