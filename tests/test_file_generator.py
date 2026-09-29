@@ -25,6 +25,35 @@ class TestPyPromptFileGeneratorNode:
         assert "script_file" in input_types["required"]
         assert "optional" in input_types
         assert "base_path" in input_types["optional"]
+        for prompt_name in ("positive_prompt", "negative_prompt"):
+            prompt_input = input_types["optional"][prompt_name]
+            assert prompt_input[0] == "STRING"
+            assert prompt_input[1]["forceInput"] is True
+
+    def test_execute_edits_connected_prompts(self):
+        """File scripts receive and can edit both connected prompt variables."""
+        from src.pyprompt_generator.nodes import PyPromptFileGeneratorNode
+
+        script_content = '''
+positive_prompt = positive_prompt.replace("cat", "dog") + ", cinematic"
+negative_prompt += ", text, watermark"
+'''
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".py", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(script_content)
+            temp_file = f.name
+
+        try:
+            node = PyPromptFileGeneratorNode()
+            assert node.execute(
+                os.path.basename(temp_file),
+                os.path.dirname(temp_file),
+                "cat portrait",
+                "blurry",
+            ) == ("dog portrait, cinematic", "blurry, text, watermark")
+        finally:
+            os.unlink(temp_file)
 
     def test_execute_with_existing_file(self):
         """Test execution with an existing script file"""

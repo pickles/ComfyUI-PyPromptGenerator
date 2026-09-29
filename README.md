@@ -117,6 +117,23 @@ The `run_sample.py` wrapper allows you to create and run your own prompt generat
 - **Organized Workflows**: Keep complex prompt logic in separate, reusable files
 - **Version Control**: Track and manage prompt scripts in your project
 
+### Editing Prompts from Other Nodes
+
+Both PyPrompt Generator nodes provide optional connection-only
+`positive_prompt` and `negative_prompt` inputs. Connect prompt outputs from
+another node, then edit the values in the Python script using variables with
+the same names:
+
+```python
+positive_prompt = positive_prompt.replace("cat", "dog") + ", cinematic"
+negative_prompt += ", text, watermark"
+```
+
+The edited values are returned through the two prompt outputs. If a connected
+input is an empty string, it remains empty, including when the script changes a
+connected prompt to an empty string. Leave an input unconnected to retain the
+existing fallback behavior when the script does not set that prompt.
+
 ### 🛠 **Powerful Utility Functions**
 All nodes include access to specialized utility functions:
 
@@ -578,6 +595,8 @@ Main node for inline script execution.
 
 **Inputs:**
 - `script` (STRING): Python script to execute
+- `positive_prompt` (STRING, optional connection): Prompt supplied by another node
+- `negative_prompt` (STRING, optional connection): Prompt supplied by another node
 
 **Outputs:**
 - `positive_prompt` (STRING): Generated positive prompt
@@ -589,6 +608,8 @@ Node for file-based script execution.
 **Inputs:**
 - `script_file` (STRING): Path to Python script file
 - `base_path` (STRING, optional): Base directory for relative paths
+- `positive_prompt` (STRING, optional connection): Prompt supplied by another node
+- `negative_prompt` (STRING, optional connection): Prompt supplied by another node
 
 **Outputs:**
 - `positive_prompt` (STRING): Generated positive prompt

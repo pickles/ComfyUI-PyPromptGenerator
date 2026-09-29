@@ -126,7 +126,14 @@ class PyPromptBaseNode:
 
         return global_vars, local_vars
 
-    def _execute_script(self, script, node_name="PyPrompt", extra_info=""):
+    def _execute_script(
+        self,
+        script,
+        node_name="PyPrompt",
+        extra_info="",
+        positive_prompt=None,
+        negative_prompt=None,
+    ):
         """
         Execute a Python script and return positive/negative prompts
         Args:
@@ -137,16 +144,26 @@ class PyPromptBaseNode:
             tuple: (positive_prompt, negative_prompt)
         """
         global_vars, local_vars = self._setup_execution_environment()
+        has_upstream_prompt = positive_prompt is not None or negative_prompt is not None
+        execution_vars = global_vars if has_upstream_prompt else local_vars
+        if positive_prompt is not None:
+            execution_vars["positive_prompt"] = positive_prompt
+        if negative_prompt is not None:
+            execution_vars["negative_prompt"] = negative_prompt
 
         try:
-            exec(script, global_vars, local_vars)
-            positive = str(local_vars.get("positive_prompt", ""))
-            negative = str(local_vars.get("negative_prompt", ""))
+            if has_upstream_prompt:
+                exec(script, execution_vars)
+            else:
+                exec(script, global_vars, local_vars)
+            positive = str(execution_vars.get("positive_prompt", ""))
+            negative = str(execution_vars.get("negative_prompt", ""))
 
-            # Set default values if empty
-            if not positive.strip():
+            # Retain the existing fallbacks only for omitted inputs. A connected
+            # empty string is a valid prompt value and must remain empty.
+            if positive_prompt is None and not positive.strip():
                 positive = "beautiful, high quality"
-            if not negative.strip():
+            if negative_prompt is None and not negative.strip():
                 negative = "low quality, worst quality"
 
             # Always output to console
@@ -185,20 +202,30 @@ class PyPromptGeneratorNode(PyPromptBaseNode):
                     "multiline": True, 
                     "default": "# ComfyUI Prompt Generator with Wildcard Support\n# WARNING: This script runs as unrestricted Python with ComfyUI's permissions.\n# You can import any installed Python module and use standard builtins.\nimport random\n\n# Built-in utility functions for enhanced prompt generation\n# Available functions: choice, weighted_choice, shuffle_list, random_range, random_boolean, join\n\n# === WILDCARD VARIABLES ===\n# Automatically loaded from wildcard/*.txt files:\n# _styles, _colors, _subjects (based on your wildcard files)\n# Empty lines and lines starting with # are ignored\n\n# Example: Using wildcard variables\nif '_styles' in globals():\n    selected_style = choice(_styles)  # Random style from styles.txt\nelse:\n    selected_style = 'realistic'  # fallback\n\nif '_colors' in globals():\n    selected_color = choice(_colors)  # Random color from colors.txt\nelse:\n    selected_color = 'vibrant'\n\nif '_subjects' in globals():\n    selected_subject = choice(_subjects)  # Random subject from subjects.txt\nelse:\n    selected_subject = 'portrait'\n\n# === WEIGHTED CHOICE EXAMPLES ===\n# Basic weighted choice example\neffects = ['3::detailed', '2::masterpiece', 'high quality', 'professional', 'artistic']\nselected_effects = choice(effects, 3)  # Pick 3 effects with weights\n\n# === UTILITY FUNCTIONS ===\n# Use random_range for numeric values\ndetail_level = random_range(1, 10)  # Random integer from 1 to 10\n\n# Use random_boolean for conditional logic\nif random_boolean(0.7):  # 70% chance\n    extra_effect = ', highly detailed'\nelse:\n    extra_effect = ''\n\n# === COMPOSE PROMPTS ===\n# Use join to create comma-separated strings\neffects_str = join(selected_effects)  # 'detailed, masterpiece, high quality'\nstyle_combo = join([selected_style, selected_color], ' ')  # 'realistic vibrant'\n\npositive_prompt = f'A {style_combo} {selected_subject}, {effects_str}{extra_effect}'\nnegative_prompt = 'low quality, blurry, worst quality'\n\n# === WILDCARD MANAGEMENT ===\n# To reload wildcard files after changes:\n# refresh_wildcards()  # Uncomment this line to force reload\n\n# === DEBUGGING ===\nprint(f'Used wildcards - Style: {selected_style}, Color: {selected_color}, Subject: {selected_subject}')\nprint(f'Effects: {join(selected_effects, \" + \")}, Detail Level: {detail_level}')\nprint(f'Available wildcard variables: {[k for k in globals().keys() if k.startswith(\"_\")]}')"
                 }),
-            }
+            },
+            "optional": {
+                "positive_prompt": ("STRING", {"forceInput": True}),
+                "negative_prompt": ("STRING", {"forceInput": True}),
+            },
         }
 
     @classmethod
-    def IS_CHANGED(cls, script):
+    def IS_CHANGED(cls, script, positive_prompt=None, negative_prompt=None):
         # Always refresh by returning a different value each time
         import time
         return float(time.time())
 
-    def execute(self, script):
+    def execute(self, script, positive_prompt=None, negative_prompt=None):
         """
         Execute the provided Python script and return positive/negative prompts
         """
-        return self._execute_script(script, "PyPrompt Generator", "Inline script execution")
+        return self._execute_script(
+            script,
+            "PyPrompt Generator",
+            "Inline script execution",
+            positive_prompt,
+            negative_prompt,
+        )
 
 
 class PyPromptFileGeneratorNode(PyPromptBaseNode):
@@ -220,16 +247,20 @@ class PyPromptFileGeneratorNode(PyPromptBaseNode):
                     "default": "",
                     "multiline": False
                 }),
+                "positive_prompt": ("STRING", {"forceInput": True}),
+                "negative_prompt": ("STRING", {"forceInput": True}),
             }
         }
 
     @classmethod
-    def IS_CHANGED(cls, script_file, base_path=""):
+    def IS_CHANGED(
+        cls, script_file, base_path="", positive_prompt=None, negative_prompt=None
+    ):
         # Always refresh by returning a different value each time
         import time
         return float(time.time())
 
-    def execute(self, script_file, base_path=""):
+    def execute(self, script_file, base_path="", positive_prompt=None, negative_prompt=None):
         """
         Load and execute Python script from file and return positive/negative prompts
         """
@@ -258,7 +289,13 @@ class PyPromptFileGeneratorNode(PyPromptBaseNode):
             return (f"Error: {error_msg}", "file read error")
 
         # Execute script using base class method
-        return self._execute_script(script, "PyPrompt File Generator", f"File: {full_path}")
+        return self._execute_script(
+            script,
+            "PyPrompt File Generator",
+            f"File: {full_path}",
+            positive_prompt,
+            negative_prompt,
+        )
 
 
 class ResolutionInputNode:

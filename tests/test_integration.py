@@ -309,6 +309,78 @@ negative_prompt = "low quality"
         assert script_input[0] == "STRING", "Script should be STRING type"
         assert script_input[1]["multiline"] is True, "Script should be multiline"
 
+        optional = input_types["optional"]
+        for prompt_name in ("positive_prompt", "negative_prompt"):
+            assert optional[prompt_name][0] == "STRING"
+            assert optional[prompt_name][1]["forceInput"] is True
+
+    def test_connected_prompts_can_be_edited_or_passed_through(
+        self, prompt_generator_node
+    ):
+        script = '''
+positive_prompt = positive_prompt.replace("cat", "dog") + ", cinematic"
+negative_prompt += ", text, watermark"
+'''
+
+        positive, negative = prompt_generator_node.execute(
+            script, "cat portrait", "blurry"
+        )
+
+        assert positive == "dog portrait, cinematic"
+        assert negative == "blurry, text, watermark"
+
+        positive, negative = prompt_generator_node.execute(
+            "# Preserve connected prompts without assigning them.\n",
+            "untouched positive",
+            "untouched negative",
+        )
+
+        assert positive == "untouched positive"
+        assert negative == "untouched negative"
+
+    def test_connected_prompts_are_available_to_script_helper_functions(
+        self, prompt_generator_node
+    ):
+        script = '''
+positive_prompt += ", cinematic"
+
+def edit_prompt():
+    return positive_prompt.replace("cat", "dog")
+
+positive_prompt = edit_prompt()
+positive_prompt = "|".join(
+    part for _ in range(1) for part in positive_prompt.split(", ")
+)
+'''
+
+        assert prompt_generator_node.execute(script, "cat portrait", "blurry") == (
+            "dog portrait|cinematic",
+            "blurry",
+        )
+
+    def test_connected_empty_prompts_remain_empty(self, prompt_generator_node):
+        positive, negative = prompt_generator_node.execute(
+            "positive_prompt = \"\"\nnegative_prompt = \"\"",
+            "source positive",
+            "source negative",
+        )
+
+        assert positive == ""
+        assert negative == ""
+
+        positive, negative = prompt_generator_node.execute(
+            "# Preserve connected empty prompts.\n", "", ""
+        )
+
+        assert positive == ""
+        assert negative == ""
+
+    def test_omitted_prompts_keep_existing_fallbacks(self, prompt_generator_node):
+        assert prompt_generator_node.execute("# No prompt assignments.\n") == (
+            "beautiful, high quality",
+            "low quality, worst quality",
+        )
+
     def test_node_return_types(self, prompt_generator_node):
         """Test node return type definitions"""
         return_types = prompt_generator_node.RETURN_TYPES
